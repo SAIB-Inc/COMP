@@ -1,0 +1,9 @@
+# .NET files
+**/bin/**
+**/obj/**
+
+appsettings.json
+appsettings.*.json
+
+.env
+.mono
