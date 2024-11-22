@@ -8,7 +8,6 @@ public record TokenMetadata
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string Ticker { get; set; } = string.Empty; 
-    public string Policy { get; set; } = string.Empty; 
     public string Url { get; set; } = string.Empty;
     public string Logo { get; set; } = string.Empty;
     public int Decimals { get; set; }

@@ -188,9 +188,6 @@ public class TokenMetadataWorker(
             ? decimalsElement.GetProperty("value").GetInt32() : 0;
         string ticker = mappingJson.TryGetProperty("ticker", out JsonElement tickerElement) 
             ? tickerElement.GetProperty("value").GetString() ?? string.Empty : string.Empty;
-        string policy = mappingJson.TryGetProperty("policy", out JsonElement policyElement)
-            ? policyElement.GetString() ?? string.Empty
-            : string.Empty;
 
         await using TokenMetadataDbContext? dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
 
@@ -202,8 +199,7 @@ public class TokenMetadataWorker(
             Url = url,
             Logo = logo,
             Decimals = decimals,
-            Ticker = ticker,
-            Policy = policy
+            Ticker = ticker
         }, stoppingToken);
 
         await dbContext.SaveChangesAsync(stoppingToken);
