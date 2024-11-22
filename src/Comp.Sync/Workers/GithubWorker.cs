@@ -27,8 +27,8 @@ public class GithubWorker(
         {
             _logger.LogInformation("Syncing Mappings");
 
-            using TokenMetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
-            HttpClient hc = _httpClientFactory.CreateClient("Github");
+            await using TokenMetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
+            using HttpClient hc = _httpClientFactory.CreateClient("Github");
             SyncState? syncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
 
             if (syncState is null)
@@ -77,7 +77,7 @@ public class GithubWorker(
         {
             if (item.Path?.StartsWith("mappings/") == true && item.Path.EndsWith(".json"))
             {
-                await ProcessMappingItem(hc, dbContext, item, latestCommit, stoppingToken);
+                await ProcessMappingFile(hc, dbContext, item.Path!, latestCommit.Sha!, stoppingToken);
             }
         }
 
@@ -109,31 +109,6 @@ public class GithubWorker(
         } while (commitPage?.Any() == true);
     }
 
-    private async Task ProcessMappingItem(HttpClient hc, TokenMetadataDbContext dbContext, GitTreeItem item, GitCommit latestCommit, CancellationToken stoppingToken)
-    {
-        if (item.Path == null)
-        {
-            _logger.LogError("Item path is null for item: {item}", item);
-            return;
-        }
-
-        string subject = item.Path
-            .Replace("mappings/", string.Empty)
-            .Replace(".json", string.Empty);
-
-        var existingEntry = await dbContext.TokenMetadata
-            .FirstOrDefaultAsync(t => t.Subject == subject, stoppingToken);
-
-        if (existingEntry != null) return;
-
-        JsonElement mappingJson = await hc.GetFromJsonAsync<JsonElement>(
-            $"https://raw.githubusercontent.com/{_registryOwner}/{_registryRepo}/{latestCommit.Sha}/{item.Path}",
-            cancellationToken: stoppingToken
-        );
-
-        await SaveTokenMetadataAsync(mappingJson, stoppingToken);
-    }
-
     private async Task ProcessCommitFiles(HttpClient hc, TokenMetadataDbContext dbContext, GitCommit commit, CancellationToken stoppingToken)
     {
         GitCommit? resolvedCommit = await hc.GetFromJsonAsync<GitCommit>(commit.Url, cancellationToken: stoppingToken);
@@ -144,31 +119,47 @@ public class GithubWorker(
         {
             if (file.Filename?.StartsWith("mappings/") == true && file.Filename.EndsWith(".json"))
             {
-                string subject = file.Filename
-                    .Replace("mappings/", string.Empty)
-                    .Replace(".json", string.Empty);
-
-                var existingEntry = await dbContext.TokenMetadata
-                    .FirstOrDefaultAsync(t => t.Subject == subject, stoppingToken);
-
-                if (existingEntry != null) continue;
-
-                JsonElement mappingJson = await hc.GetFromJsonAsync<JsonElement>(
-                    $"https://raw.githubusercontent.com/{_registryOwner}/{_registryRepo}/{commit.Sha}/{file.Filename}",
-                    cancellationToken: stoppingToken
-                );
-
-                await SaveTokenMetadataAsync(mappingJson, stoppingToken);
+                await ProcessMappingFile(hc, dbContext, file.Filename, commit.Sha!, stoppingToken);
             }
         }
     }
 
+    private async Task ProcessMappingFile(HttpClient hc, TokenMetadataDbContext dbContext, string path, string sha, CancellationToken stoppingToken)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            _logger.LogError("Item path is null or empty");
+            return;
+        }
+
+        string subject = path
+            .Replace("mappings/", string.Empty)
+            .Replace(".json", string.Empty);
+
+        var existingEntry = await dbContext.TokenMetadata
+            .FirstOrDefaultAsync(t => t.Subject == subject, stoppingToken);
+
+        if (existingEntry != null)
+        {
+            _logger.LogInformation("Subject {subject} already exists in the database. Skipping...", subject);
+            return;
+        }
+
+        JsonElement mappingJson = await hc.GetFromJsonAsync<JsonElement>(
+            $"https://raw.githubusercontent.com/{_registryOwner}/{_registryRepo}/{sha}/{path}",
+            cancellationToken: stoppingToken
+        );
+
+        await SaveTokenMetadataAsync(mappingJson, stoppingToken);
+    }
+
+
     // TODO: Refactor this to be more efficient
     private async Task UpdateSyncStateAsync(string sha, DateTime date, CancellationToken stoppingToken)
     {
-        using var dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
+        await using TokenMetadataDbContext? dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
 
-        var syncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
+        SyncState? syncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
 
         if (syncState != null)
         {
@@ -184,6 +175,7 @@ public class GithubWorker(
         dbContext.SyncState.Add(newSyncState);
 
         await dbContext.SaveChangesAsync(stoppingToken);
+        await dbContext.DisposeAsync();
     }
 
     private async Task SaveTokenMetadataAsync(JsonElement mappingJson, CancellationToken stoppingToken)
@@ -192,13 +184,21 @@ public class GithubWorker(
         string name = mappingJson.GetProperty("name").GetProperty("value").GetString()!;
         string description = mappingJson.GetProperty("description").GetProperty("value").GetString()!;
 
-        string url = mappingJson.TryGetProperty("url", out JsonElement urlElement) ? urlElement.GetProperty("value").GetString() ?? string.Empty : string.Empty;
-        string logo = mappingJson.TryGetProperty("logo", out JsonElement logoElement) ? logoElement.GetProperty("value").GetString() ?? string.Empty : string.Empty;
-        int decimals = mappingJson.TryGetProperty("decimals", out JsonElement decimalsElement) ? decimalsElement.GetProperty("value").GetInt32() : 0;
+        string url = mappingJson.TryGetProperty("url", out JsonElement urlElement) 
+            ? urlElement.GetProperty("value").GetString() ?? string.Empty : string.Empty;
+        string logo = mappingJson.TryGetProperty("logo", out JsonElement logoElement) 
+            ? logoElement.GetProperty("value").GetString() ?? string.Empty : string.Empty;
+        int decimals = mappingJson.TryGetProperty("decimals", out JsonElement decimalsElement) 
+            ? decimalsElement.GetProperty("value").GetInt32() : 0;
+        string ticker = mappingJson.TryGetProperty("ticker", out JsonElement tickerElement) 
+            ? tickerElement.GetProperty("value").GetString() ?? string.Empty : string.Empty;
+        string policy = mappingJson.TryGetProperty("policy", out JsonElement policyElement)
+            ? policyElement.GetString() ?? string.Empty
+            : string.Empty;
 
-        using var dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
+        await using TokenMetadataDbContext? dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
 
-        await dbContext.TokenMetadata.AddAsync(new()
+        await dbContext.TokenMetadata.AddAsync(new TokenMetadata
         {
             Subject = subject,
             Name = name,
@@ -206,10 +206,12 @@ public class GithubWorker(
             Url = url,
             Logo = logo,
             Decimals = decimals,
+            Ticker = ticker,
+            Policy = policy
         }, stoppingToken);
 
         await dbContext.SaveChangesAsync(stoppingToken);
-
+        await dbContext.DisposeAsync();
         _logger.LogInformation("Saved metadata for subject {subject}", subject);
     }
 }
