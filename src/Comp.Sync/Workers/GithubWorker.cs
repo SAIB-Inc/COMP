@@ -153,29 +153,27 @@ public class GithubWorker(
         await SaveTokenMetadataAsync(mappingJson, stoppingToken);
     }
 
-
-    // TODO: Refactor this to be more efficient
     private async Task UpdateSyncStateAsync(string sha, DateTime date, CancellationToken stoppingToken)
     {
         await using TokenMetadataDbContext? dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
-
-        SyncState? syncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
-
-        if (syncState != null)
+        
+        try
         {
-            dbContext.SyncState.Remove(syncState);
+            var syncState = await dbContext.SyncState.FirstOrDefaultAsync(stoppingToken) 
+                ?? new SyncState();
+                
+            syncState.Sha = sha;
+            syncState.Date = date;
+
+            dbContext.SyncState.Update(syncState);
             await dbContext.SaveChangesAsync(stoppingToken);
+            await dbContext.DisposeAsync();
         }
-
-        var newSyncState = new SyncState
+        catch (Exception ex)
         {
-            Sha = sha,
-            Date = date
-        };
-        dbContext.SyncState.Add(newSyncState);
-
-        await dbContext.SaveChangesAsync(stoppingToken);
-        await dbContext.DisposeAsync();
+            _logger.LogError(ex, "Failed to update sync state. SHA: {Sha}, Date: {Date}", sha, date);
+            throw;
+        }
     }
 
     private async Task SaveTokenMetadataAsync(JsonElement mappingJson, CancellationToken stoppingToken)
