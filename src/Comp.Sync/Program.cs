@@ -13,7 +13,7 @@ builder.Services.AddDbContextFactory<TokenMetadataDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("TokenMetadataService"));
 });
 
-builder.Services.AddHostedService<GithubWorker>();
+builder.Services.AddHostedService<TokenMetadataWorker>();
 
 builder.Services.AddHttpClient("Github", client =>
 {

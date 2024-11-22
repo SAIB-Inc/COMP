@@ -1,5 +1,3 @@
-using System.Net.Http.Headers;
-using System.Reflection;
 using System.Text.Json;
 using Cardano.Metadata.Data;
 using Cardano.Metadata.Models;
@@ -7,13 +5,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Cardano.Metadata.Workers;
 
-public class GithubWorker(
-    ILogger<GithubWorker> logger,
+public class TokenMetadataWorker(
+    ILogger<TokenMetadataWorker> logger,
     IConfiguration config,
     IHttpClientFactory httpClientFactory,
     IDbContextFactory<TokenMetadataDbContext> dbContextFactory) : BackgroundService
 {
-    private readonly ILogger<GithubWorker> _logger = logger;
+    private readonly ILogger<TokenMetadataWorker> _logger = logger;
     private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
     private readonly IDbContextFactory<TokenMetadataDbContext> _dbContextFactory = dbContextFactory;
     private readonly string _registryOwner = config["RegistryOwner"] ??
