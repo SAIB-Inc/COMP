@@ -26,23 +26,23 @@ public class TokenMetadataWorker(
             _logger.LogInformation("Syncing Mappings");
 
             await using TokenMetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
-            
             SyncState? syncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
+            await dbContext.DisposeAsync();
 
             if (syncState is null)
             {
-                await SyncAllMappingsAsync(dbContext, stoppingToken);
+                await SyncAllMappingsAsync(stoppingToken);
             }
             else
             {
-                await SyncSinceLastStateAsync(dbContext, syncState, stoppingToken);
+                await SyncSinceLastStateAsync(syncState, stoppingToken);
             }
 
             await Task.Delay(1000 * 60, stoppingToken);
         }
     }
 
-    private async Task SyncAllMappingsAsync(TokenMetadataDbContext dbContext, CancellationToken stoppingToken)
+    private async Task SyncAllMappingsAsync(CancellationToken stoppingToken)
     {
         _logger.LogWarning("No Sync State Information, syncing all mappings...");
 
@@ -77,14 +77,14 @@ public class TokenMetadataWorker(
         {
             if (item.Path?.StartsWith("mappings/") == true && item.Path.EndsWith(".json"))
             {
-                await ProcessMappingFileAsync(dbContext, item.Path!, latestCommit.Sha!, stoppingToken);
+                await ProcessMappingFileAsync(item.Path!, latestCommit.Sha!, stoppingToken);
             }
         }
 
         await UpdateSyncStateAsync(latestCommit.Sha!, latestCommit.Commit?.Author?.Date ?? DateTime.UtcNow, stoppingToken);
     }
 
-    private async Task SyncSinceLastStateAsync(TokenMetadataDbContext dbContext, SyncState syncState, CancellationToken stoppingToken)
+    private async Task SyncSinceLastStateAsync(SyncState syncState, CancellationToken stoppingToken)
     {
         _logger.LogInformation("Repo: {repo} Owner: {owner} checking for changes...", _registryOwner, _registryRepo);
 
@@ -104,14 +104,14 @@ public class TokenMetadataWorker(
 
             foreach (GitCommit commit in commitPage)
             {
-                await ProcessCommitFilesAsync(dbContext, commit, stoppingToken);
+                await ProcessCommitFilesAsync(commit, stoppingToken);
                 await UpdateSyncStateAsync(commit.Sha!, commit.Commit?.Author?.Date ?? DateTime.UtcNow, stoppingToken);
             }
             page++;
         } while (commitPage?.Any() == true);
     }
 
-    private async Task ProcessCommitFilesAsync(TokenMetadataDbContext dbContext, GitCommit commit, CancellationToken stoppingToken)
+    private async Task ProcessCommitFilesAsync(GitCommit commit, CancellationToken stoppingToken)
     {
         HttpClient? apiClient = _httpClientFactory.CreateClient("GithubApi");
 
@@ -123,12 +123,12 @@ public class TokenMetadataWorker(
         {
             if (file.Filename?.StartsWith("mappings/") == true && file.Filename.EndsWith(".json"))
             {
-                await ProcessMappingFileAsync(dbContext, file.Filename, commit.Sha!, stoppingToken);
+                await ProcessMappingFileAsync(file.Filename, commit.Sha!, stoppingToken);
             }
         }
     }
 
-    private async Task ProcessMappingFileAsync(TokenMetadataDbContext dbContext, string path, string sha, CancellationToken stoppingToken)
+    private async Task ProcessMappingFileAsync(string path, string sha, CancellationToken stoppingToken)
     {
         if (string.IsNullOrEmpty(path))
         {
@@ -140,8 +140,12 @@ public class TokenMetadataWorker(
             .Replace("mappings/", string.Empty)
             .Replace(".json", string.Empty);
 
-        var existingEntry = await dbContext.TokenMetadata
+        await using TokenMetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
+        
+        TokenMetadata? existingEntry = await dbContext.TokenMetadata
             .FirstOrDefaultAsync(t => t.Subject == subject, stoppingToken);
+        
+        await dbContext.DisposeAsync();
 
         if (existingEntry != null)
         {
@@ -171,7 +175,7 @@ public class TokenMetadataWorker(
             await dbContext.SaveChangesAsync(stoppingToken);
         }
 
-        var newSyncState = new SyncState
+        SyncState? newSyncState = new SyncState
         {
             Sha = sha,
             Date = date
