@@ -31,18 +31,18 @@ public class TokenMetadataWorker(
 
             if (syncState is null)
             {
-                await SyncAllMappings(hc, dbContext, stoppingToken);
+                await SyncAllMappingsAsync(hc, dbContext, stoppingToken);
             }
             else
             {
-                await SyncChangesSinceLastSync(hc, dbContext, syncState, stoppingToken);
+                await SyncSinceLastStateAsync(hc, dbContext, syncState, stoppingToken);
             }
 
             await Task.Delay(1000 * 60, stoppingToken);
         }
     }
 
-    private async Task SyncAllMappings(HttpClient hc, TokenMetadataDbContext dbContext, CancellationToken stoppingToken)
+    private async Task SyncAllMappingsAsync(HttpClient hc, TokenMetadataDbContext dbContext, CancellationToken stoppingToken)
     {
         _logger.LogWarning("No Sync State Information, syncing all mappings...");
 
@@ -75,14 +75,14 @@ public class TokenMetadataWorker(
         {
             if (item.Path?.StartsWith("mappings/") == true && item.Path.EndsWith(".json"))
             {
-                await ProcessMappingFile(hc, dbContext, item.Path!, latestCommit.Sha!, stoppingToken);
+                await ProcessMappingFileAsync(hc, dbContext, item.Path!, latestCommit.Sha!, stoppingToken);
             }
         }
 
         await UpdateSyncStateAsync(latestCommit.Sha!, latestCommit.Commit?.Author?.Date ?? DateTime.UtcNow, stoppingToken);
     }
 
-    private async Task SyncChangesSinceLastSync(HttpClient hc, TokenMetadataDbContext dbContext, SyncState syncState, CancellationToken stoppingToken)
+    private async Task SyncSinceLastStateAsync(HttpClient hc, TokenMetadataDbContext dbContext, SyncState syncState, CancellationToken stoppingToken)
     {
         _logger.LogInformation("Repo: {repo} Owner: {owner} checking for changes...", _registryOwner, _registryRepo);
 
@@ -100,14 +100,14 @@ public class TokenMetadataWorker(
 
             foreach (GitCommit commit in commitPage)
             {
-                await ProcessCommitFiles(hc, dbContext, commit, stoppingToken);
+                await ProcessCommitFilesAsync(hc, dbContext, commit, stoppingToken);
                 await UpdateSyncStateAsync(commit.Sha!, commit.Commit?.Author?.Date ?? DateTime.UtcNow, stoppingToken);
             }
             page++;
         } while (commitPage?.Any() == true);
     }
 
-    private async Task ProcessCommitFiles(HttpClient hc, TokenMetadataDbContext dbContext, GitCommit commit, CancellationToken stoppingToken)
+    private async Task ProcessCommitFilesAsync(HttpClient hc, TokenMetadataDbContext dbContext, GitCommit commit, CancellationToken stoppingToken)
     {
         GitCommit? resolvedCommit = await hc.GetFromJsonAsync<GitCommit>(commit.Url, cancellationToken: stoppingToken);
 
@@ -117,12 +117,12 @@ public class TokenMetadataWorker(
         {
             if (file.Filename?.StartsWith("mappings/") == true && file.Filename.EndsWith(".json"))
             {
-                await ProcessMappingFile(hc, dbContext, file.Filename, commit.Sha!, stoppingToken);
+                await ProcessMappingFileAsync(hc, dbContext, file.Filename, commit.Sha!, stoppingToken);
             }
         }
     }
 
-    private async Task ProcessMappingFile(HttpClient hc, TokenMetadataDbContext dbContext, string path, string sha, CancellationToken stoppingToken)
+    private async Task ProcessMappingFileAsync(HttpClient hc, TokenMetadataDbContext dbContext, string path, string sha, CancellationToken stoppingToken)
     {
         if (string.IsNullOrEmpty(path))
         {
