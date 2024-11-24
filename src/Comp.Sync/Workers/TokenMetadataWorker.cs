@@ -154,24 +154,24 @@ public class TokenMetadataWorker(
     private async Task UpdateSyncStateAsync(string sha, DateTime date, CancellationToken stoppingToken)
     {
         await using TokenMetadataDbContext? dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
-        
-        try
-        {
-            var syncState = await dbContext.SyncState.FirstOrDefaultAsync(stoppingToken) 
-                ?? new SyncState();
-                
-            syncState.Sha = sha;
-            syncState.Date = date;
 
-            dbContext.SyncState.Update(syncState);
-            await dbContext.SaveChangesAsync(stoppingToken);
-            await dbContext.DisposeAsync();
-        }
-        catch (Exception ex)
+        SyncState? syncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
+
+        if (syncState != null)
         {
-            _logger.LogError(ex, "Failed to update sync state. SHA: {Sha}, Date: {Date}", sha, date);
-            throw;
+            dbContext.SyncState.Remove(syncState);
+            await dbContext.SaveChangesAsync(stoppingToken);
         }
+
+        var newSyncState = new SyncState
+        {
+            Sha = sha,
+            Date = date
+        };
+        dbContext.SyncState.Add(newSyncState);
+
+        await dbContext.SaveChangesAsync(stoppingToken);
+        await dbContext.DisposeAsync();
     }
 
     private async Task SaveTokenMetadataAsync(JsonElement mappingJson, CancellationToken stoppingToken)
