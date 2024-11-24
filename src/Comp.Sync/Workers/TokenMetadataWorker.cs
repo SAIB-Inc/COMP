@@ -26,29 +26,31 @@ public class TokenMetadataWorker(
             _logger.LogInformation("Syncing Mappings");
 
             await using TokenMetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
-            using HttpClient hc = _httpClientFactory.CreateClient("Github");
+            
             SyncState? syncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
 
             if (syncState is null)
             {
-                await SyncAllMappingsAsync(hc, dbContext, stoppingToken);
+                await SyncAllMappingsAsync(dbContext, stoppingToken);
             }
             else
             {
-                await SyncSinceLastStateAsync(hc, dbContext, syncState, stoppingToken);
+                await SyncSinceLastStateAsync(dbContext, syncState, stoppingToken);
             }
 
             await Task.Delay(1000 * 60, stoppingToken);
         }
     }
 
-    private async Task SyncAllMappingsAsync(HttpClient hc, TokenMetadataDbContext dbContext, CancellationToken stoppingToken)
+    private async Task SyncAllMappingsAsync(TokenMetadataDbContext dbContext, CancellationToken stoppingToken)
     {
         _logger.LogWarning("No Sync State Information, syncing all mappings...");
 
-        IEnumerable<GitCommit>? latestCommits = await hc
+        HttpClient? apiClient = _httpClientFactory.CreateClient("GithubApi");
+
+        IEnumerable<GitCommit>? latestCommits = await apiClient
             .GetFromJsonAsync<IEnumerable<GitCommit>>(
-                $"https://api.github.com/repos/{_registryOwner}/{_registryRepo}/commits",
+                $"repos/{_registryOwner}/{_registryRepo}/commits", 
                 stoppingToken
             );
 
@@ -59,9 +61,9 @@ public class TokenMetadataWorker(
         }
 
         GitCommit latestCommit = latestCommits.First();
-        GitTreeResponse? treeResponse = await hc
+        GitTreeResponse? treeResponse = await apiClient
             .GetFromJsonAsync<GitTreeResponse>(
-                $"https://api.github.com/repos/{_registryOwner}/{_registryRepo}/git/trees/{latestCommit.Sha}?recursive=true",
+                $"repos/{_registryOwner}/{_registryRepo}/git/trees/{latestCommit.Sha}?recursive=true",
                 stoppingToken
         );
 
@@ -75,24 +77,26 @@ public class TokenMetadataWorker(
         {
             if (item.Path?.StartsWith("mappings/") == true && item.Path.EndsWith(".json"))
             {
-                await ProcessMappingFileAsync(hc, dbContext, item.Path!, latestCommit.Sha!, stoppingToken);
+                await ProcessMappingFileAsync(dbContext, item.Path!, latestCommit.Sha!, stoppingToken);
             }
         }
 
         await UpdateSyncStateAsync(latestCommit.Sha!, latestCommit.Commit?.Author?.Date ?? DateTime.UtcNow, stoppingToken);
     }
 
-    private async Task SyncSinceLastStateAsync(HttpClient hc, TokenMetadataDbContext dbContext, SyncState syncState, CancellationToken stoppingToken)
+    private async Task SyncSinceLastStateAsync(TokenMetadataDbContext dbContext, SyncState syncState, CancellationToken stoppingToken)
     {
         _logger.LogInformation("Repo: {repo} Owner: {owner} checking for changes...", _registryOwner, _registryRepo);
 
         int page = 1;
         IEnumerable<GitCommit>? commitPage;
 
+        HttpClient? apiClient = _httpClientFactory.CreateClient("GithubApi");
+
         do
         {
-            commitPage = await hc.GetFromJsonAsync<IEnumerable<GitCommit>>(
-                $"https://api.github.com/repos/{_registryOwner}/{_registryRepo}/commits?since={syncState.Date.AddSeconds(1):yyyy-MM-dd'T'HH:mm:ssZ}&page={page}",
+            commitPage = await apiClient.GetFromJsonAsync<IEnumerable<GitCommit>>(
+                $"repos/{_registryOwner}/{_registryRepo}/commits?since={syncState.Date.AddSeconds(1):yyyy-MM-dd'T'HH:mm:ssZ}&page={page}",
                 cancellationToken: stoppingToken
             );
 
@@ -100,16 +104,18 @@ public class TokenMetadataWorker(
 
             foreach (GitCommit commit in commitPage)
             {
-                await ProcessCommitFilesAsync(hc, dbContext, commit, stoppingToken);
+                await ProcessCommitFilesAsync(dbContext, commit, stoppingToken);
                 await UpdateSyncStateAsync(commit.Sha!, commit.Commit?.Author?.Date ?? DateTime.UtcNow, stoppingToken);
             }
             page++;
         } while (commitPage?.Any() == true);
     }
 
-    private async Task ProcessCommitFilesAsync(HttpClient hc, TokenMetadataDbContext dbContext, GitCommit commit, CancellationToken stoppingToken)
+    private async Task ProcessCommitFilesAsync(TokenMetadataDbContext dbContext, GitCommit commit, CancellationToken stoppingToken)
     {
-        GitCommit? resolvedCommit = await hc.GetFromJsonAsync<GitCommit>(commit.Url, cancellationToken: stoppingToken);
+        HttpClient? apiClient = _httpClientFactory.CreateClient("GithubApi");
+
+        GitCommit? resolvedCommit = await apiClient.GetFromJsonAsync<GitCommit>(commit.Url, cancellationToken: stoppingToken);
 
         if (resolvedCommit?.Files == null) return;
 
@@ -117,12 +123,12 @@ public class TokenMetadataWorker(
         {
             if (file.Filename?.StartsWith("mappings/") == true && file.Filename.EndsWith(".json"))
             {
-                await ProcessMappingFileAsync(hc, dbContext, file.Filename, commit.Sha!, stoppingToken);
+                await ProcessMappingFileAsync(dbContext, file.Filename, commit.Sha!, stoppingToken);
             }
         }
     }
 
-    private async Task ProcessMappingFileAsync(HttpClient hc, TokenMetadataDbContext dbContext, string path, string sha, CancellationToken stoppingToken)
+    private async Task ProcessMappingFileAsync(TokenMetadataDbContext dbContext, string path, string sha, CancellationToken stoppingToken)
     {
         if (string.IsNullOrEmpty(path))
         {
@@ -143,8 +149,10 @@ public class TokenMetadataWorker(
             return;
         }
 
-        JsonElement mappingJson = await hc.GetFromJsonAsync<JsonElement>(
-            $"https://raw.githubusercontent.com/{_registryOwner}/{_registryRepo}/{sha}/{path}",
+        HttpClient? rawClient = _httpClientFactory.CreateClient("GithubRaw");
+
+        JsonElement mappingJson = await rawClient.GetFromJsonAsync<JsonElement>(
+            $"{_registryOwner}/{_registryRepo}/{sha}/{path}",
             cancellationToken: stoppingToken
         );
 
