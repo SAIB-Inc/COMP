@@ -18,7 +18,7 @@ public class TokenMetadataWorker(
         throw new ArgumentNullException("RegistryOwner", "Registry owner must be configured");
     private readonly string _registryRepo = config["RegistryRepo"] ??
         throw new ArgumentNullException("RegistryRepo", "Registry repository must be configured");
-
+    private readonly int _syncDelaySeconds = config.GetValue("SyncDelaySeconds", 60); 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -35,10 +35,10 @@ public class TokenMetadataWorker(
             }
             else
             {
-                await SyncSinceLastStateAsync(syncState, stoppingToken);
+                await SyncSinceLastStateAsync(stoppingToken);
             }
 
-            await Task.Delay(1000 * 60, stoppingToken);
+            await Task.Delay(_syncDelaySeconds, stoppingToken);
         }
     }
 
@@ -46,122 +46,100 @@ public class TokenMetadataWorker(
     {
         _logger.LogWarning("No Sync State Information, syncing all mappings...");
 
-        HttpClient? apiClient = _httpClientFactory.CreateClient("GithubApi");
-
-        IEnumerable<GitCommit>? latestCommits = await apiClient
-            .GetFromJsonAsync<IEnumerable<GitCommit>>(
-                $"repos/{_registryOwner}/{_registryRepo}/commits", 
-                stoppingToken
-            );
-
-        if (latestCommits?.Any() != true)
+        GitCommit? latestCommit = await GetLatestCommitAsync(stoppingToken);
+        if (latestCommit is null || latestCommit.Sha is null)
         {
-            _logger.LogError("Repo: {repo} Owner: {owner} has no commits!", _registryOwner, _registryRepo);
-            return;
+            throw new InvalidOperationException("Failed to retrieve the latest commit.");
         }
 
-        GitCommit latestCommit = latestCommits.First();
-        GitTreeResponse? treeResponse = await apiClient
-            .GetFromJsonAsync<GitTreeResponse>(
-                $"repos/{_registryOwner}/{_registryRepo}/git/trees/{latestCommit.Sha}?recursive=true",
-                stoppingToken
-        );
-
-        if (treeResponse?.Tree == null)
+        GitTreeResponse? treeResponse = await GetGitTreeResponseAsync(latestCommit.Sha, stoppingToken);
+        if (treeResponse?.Tree is null)
         {
-            _logger.LogError("Repo: {repo} Owner: {owner} has no mappings!", _registryOwner, _registryRepo);
-            return;
+            throw new InvalidOperationException("Failed to retrieve the Git tree response.");
         }
 
-        foreach (GitTreeItem item in treeResponse.Tree)
+        await foreach (GitTreeItem item in ExtractGitTreeMappingFilesAsync(treeResponse))
         {
-            if (item.Path?.StartsWith("mappings/") == true && item.Path.EndsWith(".json"))
+            if (item.Path is null)
             {
-                await ProcessMappingFileAsync(item.Path!, latestCommit.Sha!, stoppingToken);
+                _logger.LogWarning("Tree item has no path - Item: {Item}", item);
+                continue;
             }
+
+            if (await TokenMetadataExistsAsync(item.Path, stoppingToken)) continue;
+
+            JsonElement mappingJson = await ExtractMappingJsonAsync(item.Path, latestCommit.Sha, stoppingToken);
+
+            await SaveTokenMetadataAsync(mappingJson, stoppingToken);
         }
 
-        await UpdateSyncStateAsync(latestCommit.Sha!, latestCommit.Commit?.Author?.Date ?? DateTime.UtcNow, stoppingToken);
+        await UpdateSyncStateAsync(latestCommit.Sha, latestCommit.Commit?.Author?.Date ?? DateTime.UtcNow, stoppingToken);
     }
 
-    private async Task SyncSinceLastStateAsync(SyncState syncState, CancellationToken stoppingToken)
+    private async Task SyncSinceLastStateAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Repo: {repo} Owner: {owner} checking for changes...", _registryOwner, _registryRepo);
+
+        await using TokenMetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
+        SyncState? lastSyncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
+        await dbContext.DisposeAsync();
 
         int page = 1;
         IEnumerable<GitCommit>? commitPage;
 
-        HttpClient? apiClient = _httpClientFactory.CreateClient("GithubApi");
-
         do
         {
-            commitPage = await apiClient.GetFromJsonAsync<IEnumerable<GitCommit>>(
-                $"repos/{_registryOwner}/{_registryRepo}/commits?since={syncState.Date.AddSeconds(1):yyyy-MM-dd'T'HH:mm:ssZ}&page={page}",
-                cancellationToken: stoppingToken
-            );
+            commitPage = await FetchCommitPageAsync(page, stoppingToken);
 
-            if (commitPage?.Any() != true) continue;
+            if (commitPage?.Any() is not true) continue;
 
             foreach (GitCommit commit in commitPage)
             {
-                await ProcessCommitFilesAsync(commit, stoppingToken);
-                await UpdateSyncStateAsync(commit.Sha!, commit.Commit?.Author?.Date ?? DateTime.UtcNow, stoppingToken);
+                if (commit.Url is null) 
+                    throw new InvalidOperationException($"Invalid commit data received: Missing Commit Url");
+
+                if (commit.Sha is null) 
+                    throw new InvalidOperationException($"Invalid commit data received: Missing Commit Sha");
+
+                GitCommit? resolvedCommit = await GetCommitDetailsAsync(commit.Url, _httpClientFactory, stoppingToken);
+                
+                if (resolvedCommit is null)
+                {
+                    _logger.LogWarning("Resolved commit is null for SHA: {Sha}, URL: {Url}", commit.Sha, commit.Url);
+                    continue;
+                }
+
+                if (resolvedCommit.Files is null)
+                {
+                    _logger.LogWarning("Commit has no files - SHA: {Sha}, URL: {Url}", 
+                        commit.Sha, 
+                        commit.Url);
+                    continue;
+                }
+
+                await foreach (var file in ExtractGitCommitMappingFilesAsync(resolvedCommit))
+                {
+                    if (file.Filename is null)
+                    {
+                        _logger.LogWarning("File in commit has no filename - SHA: {Sha}, URL: {Url}, File: {File}", 
+                            commit.Sha, 
+                            commit.Url,
+                            file);
+                        continue;
+                    }
+
+                    if (await TokenMetadataExistsAsync(file.Filename, stoppingToken)) continue;
+
+
+                    JsonElement mappingJson = await ExtractMappingJsonAsync(file.Filename, commit.Sha, stoppingToken);
+
+                    await SaveTokenMetadataAsync(mappingJson, stoppingToken);
+                }
             }
             page++;
-        } while (commitPage?.Any() == true);
+        } while (commitPage?.Any() is true);
     }
 
-    private async Task ProcessCommitFilesAsync(GitCommit commit, CancellationToken stoppingToken)
-    {
-        HttpClient? apiClient = _httpClientFactory.CreateClient("GithubApi");
-
-        GitCommit? resolvedCommit = await apiClient.GetFromJsonAsync<GitCommit>(commit.Url, cancellationToken: stoppingToken);
-
-        if (resolvedCommit?.Files == null) return;
-
-        foreach (GitCommitFile file in resolvedCommit.Files)
-        {
-            if (file.Filename?.StartsWith("mappings/") == true && file.Filename.EndsWith(".json"))
-            {
-                await ProcessMappingFileAsync(file.Filename, commit.Sha!, stoppingToken);
-            }
-        }
-    }
-
-    private async Task ProcessMappingFileAsync(string path, string sha, CancellationToken stoppingToken)
-    {
-        if (string.IsNullOrEmpty(path))
-        {
-            _logger.LogError("Item path is null or empty");
-            return;
-        }
-
-        string subject = path
-            .Replace("mappings/", string.Empty)
-            .Replace(".json", string.Empty);
-
-        await using TokenMetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
-        
-        TokenMetadata? existingEntry = await dbContext.TokenMetadata
-            .FirstOrDefaultAsync(t => t.Subject == subject, stoppingToken);
-        
-        await dbContext.DisposeAsync();
-
-        if (existingEntry != null)
-        {
-            _logger.LogInformation("Subject {subject} already exists in the database. Skipping...", subject);
-            return;
-        }
-
-        HttpClient? rawClient = _httpClientFactory.CreateClient("GithubRaw");
-
-        JsonElement mappingJson = await rawClient.GetFromJsonAsync<JsonElement>(
-            $"{_registryOwner}/{_registryRepo}/{sha}/{path}",
-            cancellationToken: stoppingToken
-        );
-
-        await SaveTokenMetadataAsync(mappingJson, stoppingToken);
-    }
 
     private async Task UpdateSyncStateAsync(string sha, DateTime date, CancellationToken stoppingToken)
     {
@@ -169,7 +147,7 @@ public class TokenMetadataWorker(
 
         SyncState? syncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
 
-        if (syncState != null)
+        if (syncState is not null)
         {
             dbContext.SyncState.Remove(syncState);
             await dbContext.SaveChangesAsync(stoppingToken);
@@ -188,17 +166,27 @@ public class TokenMetadataWorker(
 
     private async Task SaveTokenMetadataAsync(JsonElement mappingJson, CancellationToken stoppingToken)
     {
-        string subject = mappingJson.GetProperty("subject").GetString()!;
-        string name = mappingJson.GetProperty("name").GetProperty("value").GetString()!;
-        string description = mappingJson.GetProperty("description").GetProperty("value").GetString()!;
+        if (!mappingJson.TryGetProperty("subject", out JsonElement subjectElement) ||
+            !mappingJson.TryGetProperty("name", out JsonElement nameElement) ||
+            !nameElement.TryGetProperty("value", out JsonElement nameValueElement) ||
+            !mappingJson.TryGetProperty("description", out JsonElement descElement) ||
+            !descElement.TryGetProperty("value", out JsonElement descValueElement))
+        {
+            _logger.LogWarning("Skipping token metadata - missing required properties");
+            return;
+        }
 
-        string url = mappingJson.TryGetProperty("url", out JsonElement urlElement) 
+        string subject = subjectElement.GetString()!;
+        string name = nameValueElement.GetString()!;
+        string description = descValueElement.GetString()!;
+
+        string url = mappingJson.TryGetProperty("url", out JsonElement urlElement)
             ? urlElement.GetProperty("value").GetString() ?? string.Empty : string.Empty;
-        string logo = mappingJson.TryGetProperty("logo", out JsonElement logoElement) 
+        string logo = mappingJson.TryGetProperty("logo", out JsonElement logoElement)
             ? logoElement.GetProperty("value").GetString() ?? string.Empty : string.Empty;
-        int decimals = mappingJson.TryGetProperty("decimals", out JsonElement decimalsElement) 
+        int decimals = mappingJson.TryGetProperty("decimals", out JsonElement decimalsElement)
             ? decimalsElement.GetProperty("value").GetInt32() : 0;
-        string ticker = mappingJson.TryGetProperty("ticker", out JsonElement tickerElement) 
+        string ticker = mappingJson.TryGetProperty("ticker", out JsonElement tickerElement)
             ? tickerElement.GetProperty("value").GetString() ?? string.Empty : string.Empty;
 
         await using TokenMetadataDbContext? dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
@@ -217,5 +205,120 @@ public class TokenMetadataWorker(
         await dbContext.SaveChangesAsync(stoppingToken);
         await dbContext.DisposeAsync();
         _logger.LogInformation("Saved metadata for subject {subject}", subject);
+    }
+
+    private async Task<IEnumerable<GitCommit>?> FetchCommitPageAsync(int page, CancellationToken stoppingToken)
+    {
+        HttpClient apiClient = _httpClientFactory.CreateClient("GithubApi");
+        await using TokenMetadataDbContext? dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
+        SyncState? lastSyncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
+        await dbContext.DisposeAsync();
+        return await apiClient.GetFromJsonAsync<IEnumerable<GitCommit>>(
+            $"repos/{_registryOwner}/{_registryRepo}/commits?since={lastSyncState!.Date.AddSeconds(1):yyyy-MM-dd'T'HH:mm:ssZ}&page={page}",
+            cancellationToken: stoppingToken
+        );
+    }
+
+    private async Task<GitTreeResponse?> GetGitTreeResponseAsync(string sha, CancellationToken stoppingToken)
+    {
+        HttpClient apiClient = _httpClientFactory.CreateClient("GithubApi");
+
+        return await apiClient.GetFromJsonAsync<GitTreeResponse>(
+            $"repos/{_registryOwner}/{_registryRepo}/git/trees/{sha}?recursive=true", stoppingToken);
+    }
+
+    private async Task<GitCommit?> GetLatestCommitAsync(CancellationToken stoppingToken)
+    {
+        HttpClient apiClient = _httpClientFactory.CreateClient("GithubApi");
+
+        IEnumerable<GitCommit>? latestCommits = await apiClient
+            .GetFromJsonAsync<IEnumerable<GitCommit>>($"repos/{_registryOwner}/{_registryRepo}/commits", stoppingToken);
+
+        if (latestCommits?.Any() is not true)
+        {
+            return null;
+        }
+
+        return latestCommits.First();
+    }
+
+    public static async Task<GitCommit?> GetCommitDetailsAsync(
+        string commitUrl,
+        IHttpClientFactory httpClientFactory,
+        CancellationToken stoppingToken)
+    {
+        HttpClient apiClient = httpClientFactory.CreateClient("GithubApi");
+
+        return await apiClient.GetFromJsonAsync<GitCommit>(commitUrl, cancellationToken: stoppingToken);
+    }
+
+    private async Task<bool> TokenMetadataExistsAsync(string path, CancellationToken stoppingToken)
+    {
+        string subject = path
+            .Replace("mappings/", string.Empty)
+            .Replace(".json", string.Empty);
+
+        await using TokenMetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
+
+        TokenMetadata? existingEntry = await dbContext.TokenMetadata
+            .FirstOrDefaultAsync(t => t.Subject == subject, stoppingToken);
+
+        await dbContext.DisposeAsync();
+
+        if (existingEntry is not null)
+        {
+            _logger.LogInformation("Subject {subject} already exists in the database. Skipping...", subject);
+            return true;
+        }
+
+        return false;
+    }
+
+    private async IAsyncEnumerable<GitTreeItem> ExtractGitTreeMappingFilesAsync(GitTreeResponse treeResponse)
+    {
+        if (treeResponse.Tree is null)
+        {
+            _logger.LogError("Tree response is null");
+            yield break;
+        }
+
+        foreach (GitTreeItem item in treeResponse.Tree)
+        {
+            if (item.Path?.StartsWith("mappings/") is true && item.Path.EndsWith(".json"))
+            {
+                await Task.Yield();
+                yield return item;
+            }
+        }
+    }
+
+    private async IAsyncEnumerable<GitCommitFile> ExtractGitCommitMappingFilesAsync(GitCommit commit)
+    {
+        if (commit.Files is null)
+        {
+            _logger.LogError("Commit files are null");
+            yield break;
+        }
+
+        foreach (GitCommitFile file in commit.Files)
+        {
+            if (file.Filename?.StartsWith("mappings/") == true && file.Filename.EndsWith(".json"))
+            {
+                await Task.Yield();
+                yield return file;
+            }
+        }
+    }
+
+    private async Task<JsonElement> ExtractMappingJsonAsync(string path, string sha, CancellationToken stoppingToken)
+    {
+        HttpClient? rawClient = _httpClientFactory.CreateClient("GithubRaw");
+
+        JsonElement mappingJson = await rawClient.GetFromJsonAsync<JsonElement>(
+            $"{_registryOwner}/{_registryRepo}/{sha}/{path}",
+            cancellationToken: stoppingToken
+        );
+
+        return mappingJson;
     }
 }
