@@ -1,4 +1,4 @@
-namespace Cardano.Metadata.Models;
+namespace Comp.Sync.Data.Models;
 
 public record GitCommit
 {

@@ -1,7 +1,4 @@
-using System.Text.Json;
-
-namespace Cardano.Metadata.Models;
-
+namespace Comp.Sync.Data.Models;
 public record TokenMetadata
 {
     public string Subject { get; init; } = string.Empty;

@@ -1,9 +1,9 @@
 using System.Text.Json;
-using Cardano.Metadata.Data;
-using Cardano.Metadata.Models;
+using Comp.Sync.Data;
+using Comp.Sync.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace Cardano.Metadata.Workers;
+namespace Comp.Sync.Workers;
 
 public class TokenMetadataWorker(
     ILogger<TokenMetadataWorker> logger,
@@ -14,24 +14,22 @@ public class TokenMetadataWorker(
     private readonly ILogger<TokenMetadataWorker> _logger = logger;
     private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
     private readonly IDbContextFactory<TokenMetadataDbContext> _dbContextFactory = dbContextFactory;
-    private readonly string _registryOwner = config["RegistryOwner"] ??
+    private readonly string _registryOwner = config.GetValue<string>("RegistryOwner") ?? 
         throw new ArgumentNullException("RegistryOwner", "Registry owner must be configured");
-    private readonly string _registryRepo = config["RegistryRepo"] ??
+    private readonly string _registryRepo = config.GetValue<string>("RegistryRepo") ?? 
         throw new ArgumentNullException("RegistryRepo", "Registry repository must be configured");
     private readonly int _syncDelaySeconds = config.GetValue("SyncDelaySeconds", 60); 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            _logger.LogInformation("Syncing Mappings");
+            _logger.LogInformation("Syncing Token Metadata");
 
-            await using TokenMetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
-            SyncState? syncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
-            await dbContext.DisposeAsync();
+            SyncState? syncState = await GetSyncStateAsync(stoppingToken);
 
             if (syncState is null)
             {
-                await SyncAllMappingsAsync(stoppingToken);
+                await SyncAllTokensAsync(stoppingToken);
             }
             else
             {
@@ -42,7 +40,7 @@ public class TokenMetadataWorker(
         }
     }
 
-    private async Task SyncAllMappingsAsync(CancellationToken stoppingToken)
+    private async Task SyncAllTokensAsync(CancellationToken stoppingToken)
     {
         _logger.LogWarning("No Sync State Information, syncing all mappings...");
 
@@ -80,10 +78,6 @@ public class TokenMetadataWorker(
     {
         _logger.LogInformation("Repo: {repo} Owner: {owner} checking for changes...", _registryOwner, _registryRepo);
 
-        await using TokenMetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
-        SyncState? lastSyncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
-        await dbContext.DisposeAsync();
-
         int page = 1;
         IEnumerable<GitCommit>? commitPage;
 
@@ -105,26 +99,21 @@ public class TokenMetadataWorker(
                 
                 if (resolvedCommit is null)
                 {
-                    _logger.LogWarning("Resolved commit is null for SHA: {Sha}, URL: {Url}", commit.Sha, commit.Url);
+                    _logger.LogWarning("Failed to retrieve commit : {Sha}, URL: {Url}", commit.Sha, commit.Url);
                     continue;
                 }
 
                 if (resolvedCommit.Files is null)
                 {
-                    _logger.LogWarning("Commit has no files - SHA: {Sha}, URL: {Url}", 
-                        commit.Sha, 
-                        commit.Url);
+                    _logger.LogWarning("Commit has no files : {Sha}, URL: {Url}", commit.Sha, commit.Url);
                     continue;
                 }
 
-                await foreach (var file in ExtractGitCommitMappingFilesAsync(resolvedCommit))
+                await foreach (GitCommitFile? file in ExtractGitCommitMappingFilesAsync(resolvedCommit))
                 {
                     if (file.Filename is null)
                     {
-                        _logger.LogWarning("File in commit has no filename - SHA: {Sha}, URL: {Url}, File: {File}", 
-                            commit.Sha, 
-                            commit.Url,
-                            file);
+                        _logger.LogWarning("File in commit has no filename - SHA: {Sha}, URL: {Url}", commit.Sha, commit.Url);
                         continue;
                     }
 
@@ -145,7 +134,7 @@ public class TokenMetadataWorker(
     {
         await using TokenMetadataDbContext? dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
 
-        SyncState? syncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
+        SyncState? syncState = await GetSyncStateAsync(stoppingToken);
 
         if (syncState is not null)
         {
@@ -204,15 +193,16 @@ public class TokenMetadataWorker(
 
         await dbContext.SaveChangesAsync(stoppingToken);
         await dbContext.DisposeAsync();
+
         _logger.LogInformation("Saved metadata for subject {subject}", subject);
     }
 
     private async Task<IEnumerable<GitCommit>?> FetchCommitPageAsync(int page, CancellationToken stoppingToken)
     {
         HttpClient apiClient = _httpClientFactory.CreateClient("GithubApi");
-        await using TokenMetadataDbContext? dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
-        SyncState? lastSyncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
-        await dbContext.DisposeAsync();
+
+        SyncState? lastSyncState = await GetSyncStateAsync(stoppingToken);
+
         return await apiClient.GetFromJsonAsync<IEnumerable<GitCommit>>(
             $"repos/{_registryOwner}/{_registryRepo}/commits?since={lastSyncState!.Date.AddSeconds(1):yyyy-MM-dd'T'HH:mm:ssZ}&page={page}",
             cancellationToken: stoppingToken
@@ -320,5 +310,13 @@ public class TokenMetadataWorker(
         );
 
         return mappingJson;
+    }
+
+    private async Task<SyncState?> GetSyncStateAsync(CancellationToken stoppingToken)
+    {
+        await using TokenMetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
+        SyncState? SyncState = await dbContext.SyncState.FirstOrDefaultAsync(cancellationToken: stoppingToken);
+        await dbContext.DisposeAsync();
+        return SyncState;
     }
 }

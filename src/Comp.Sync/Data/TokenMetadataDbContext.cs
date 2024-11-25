@@ -1,14 +1,12 @@
 using Microsoft.EntityFrameworkCore;
-using Cardano.Metadata.Models;
-using System.Runtime.Intrinsics.X86;
+using Comp.Sync.Data.Models;
 
-namespace Cardano.Metadata.Data;
+namespace Comp.Sync.Data;
 
-public class TokenMetadataDbContext : DbContext
+public class TokenMetadataDbContext(DbContextOptions<TokenMetadataDbContext> options) : DbContext(options)
 {
     public DbSet<TokenMetadata> TokenMetadata => Set<TokenMetadata>();
     public DbSet<SyncState> SyncState => Set<SyncState>();
-    public TokenMetadataDbContext(DbContextOptions<TokenMetadataDbContext> options) : base(options) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

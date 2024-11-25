@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using System.Reflection;
-using Cardano.Metadata.Data;
-using Cardano.Metadata.Workers;
+using Comp.Sync.Data;
+using Comp.Sync.Workers;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);

@@ -1,7 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Cardano.Metadata.Models;
-
+namespace Comp.Sync.Data.Models;
 public record GitCommitFile
 {
     public string? Filename { get; init; }

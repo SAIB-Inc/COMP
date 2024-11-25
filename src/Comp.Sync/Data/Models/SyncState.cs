@@ -1,5 +1,4 @@
-namespace Cardano.Metadata.Models;
-
+namespace Comp.Sync.Data.Models;
 public record SyncState
 {
     public string Sha { get; set; } = string.Empty;
