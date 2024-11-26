@@ -97,7 +97,7 @@ public class TokenMetadataWorker(
                 if (commit.Sha is null) 
                     throw new InvalidOperationException($"Invalid commit data received: Missing Commit Sha");
 
-                GitCommit? resolvedCommit = await GetCommitDetailsAsync(commit.Url, _httpClientFactory, stoppingToken);
+                GitCommit? resolvedCommit = await GetCommitDetailsAsync(commit.Url, stoppingToken);
                 
                 if (resolvedCommit is null)
                 {
@@ -239,12 +239,11 @@ public class TokenMetadataWorker(
     }
 
     // Fetches the details of a commit from the Github API with a given URL
-    public static async Task<GitCommit?> GetCommitDetailsAsync(
+    private async Task<GitCommit?> GetCommitDetailsAsync(
         string commitUrl,
-        IHttpClientFactory httpClientFactory,
         CancellationToken stoppingToken)
     {
-        HttpClient apiClient = httpClientFactory.CreateClient("GithubApi");
+        HttpClient apiClient = _httpClientFactory.CreateClient("GithubApi");
 
         return await apiClient.GetFromJsonAsync<GitCommit>(commitUrl, cancellationToken: stoppingToken);
     }
