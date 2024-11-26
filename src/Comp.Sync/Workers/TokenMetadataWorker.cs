@@ -36,10 +36,11 @@ public class TokenMetadataWorker(
                 await SyncSinceLastStateAsync(stoppingToken);
             }
 
-            await Task.Delay(_syncDelaySeconds, stoppingToken);
+            await Task.Delay(_syncDelaySeconds * 1000, stoppingToken);
         }
     }
 
+    // Syncs all token metadata from the beginning of the registry
     private async Task SyncAllTokensAsync(CancellationToken stoppingToken)
     {
         _logger.LogWarning("No Sync State Information, syncing all mappings...");
@@ -74,6 +75,7 @@ public class TokenMetadataWorker(
         await UpdateSyncStateAsync(latestCommit.Sha, latestCommit.Commit?.Author?.Date ?? DateTime.UtcNow, stoppingToken);
     }
 
+    // Syncs the token metadata since the last sync state
     private async Task SyncSinceLastStateAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Repo: {repo} Owner: {owner} checking for changes...", _registryOwner, _registryRepo);
@@ -129,7 +131,7 @@ public class TokenMetadataWorker(
         } while (commitPage?.Any() is true);
     }
 
-
+    // Updates the sync state in the database
     private async Task UpdateSyncStateAsync(string sha, DateTime date, CancellationToken stoppingToken)
     {
         await using TokenMetadataDbContext? dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
@@ -153,6 +155,7 @@ public class TokenMetadataWorker(
         await dbContext.DisposeAsync();
     }
 
+    // Saves token metadata to the database
     private async Task SaveTokenMetadataAsync(JsonElement mappingJson, CancellationToken stoppingToken)
     {
         if (!mappingJson.TryGetProperty("subject", out JsonElement subjectElement) ||
@@ -197,6 +200,7 @@ public class TokenMetadataWorker(
         _logger.LogInformation("Saved metadata for subject {subject}", subject);
     }
 
+    // Fetches a page of commits from the Github API
     private async Task<IEnumerable<GitCommit>?> FetchCommitPageAsync(int page, CancellationToken stoppingToken)
     {
         HttpClient apiClient = _httpClientFactory.CreateClient("GithubApi");
@@ -209,6 +213,7 @@ public class TokenMetadataWorker(
         );
     }
 
+    // Fetches the tree response for a given commit SHA
     private async Task<GitTreeResponse?> GetGitTreeResponseAsync(string sha, CancellationToken stoppingToken)
     {
         HttpClient apiClient = _httpClientFactory.CreateClient("GithubApi");
@@ -217,6 +222,7 @@ public class TokenMetadataWorker(
             $"repos/{_registryOwner}/{_registryRepo}/git/trees/{sha}?recursive=true", stoppingToken);
     }
 
+    // Fetches the latest commit from the Github API
     private async Task<GitCommit?> GetLatestCommitAsync(CancellationToken stoppingToken)
     {
         HttpClient apiClient = _httpClientFactory.CreateClient("GithubApi");
@@ -232,6 +238,7 @@ public class TokenMetadataWorker(
         return latestCommits.First();
     }
 
+    // Fetches the details of a commit from the Github API with a given URL
     public static async Task<GitCommit?> GetCommitDetailsAsync(
         string commitUrl,
         IHttpClientFactory httpClientFactory,
@@ -242,6 +249,7 @@ public class TokenMetadataWorker(
         return await apiClient.GetFromJsonAsync<GitCommit>(commitUrl, cancellationToken: stoppingToken);
     }
 
+    // Checks if a token metadata entry already exists in the database
     private async Task<bool> TokenMetadataExistsAsync(string path, CancellationToken stoppingToken)
     {
         string subject = path
@@ -264,6 +272,7 @@ public class TokenMetadataWorker(
         return false;
     }
 
+    // An async enumerable that filters out Git tree items that are in the mappings directory
     private async IAsyncEnumerable<GitTreeItem> ExtractGitTreeMappingFilesAsync(GitTreeResponse treeResponse)
     {
         if (treeResponse.Tree is null)
@@ -282,6 +291,7 @@ public class TokenMetadataWorker(
         }
     }
 
+    // An async enumerable that filters out Git commit files that are in the mappings directory
     private async IAsyncEnumerable<GitCommitFile> ExtractGitCommitMappingFilesAsync(GitCommit commit)
     {
         if (commit.Files is null)
@@ -300,6 +310,7 @@ public class TokenMetadataWorker(
         }
     }
 
+    // Retrieves the JSON content of a file from the Github API
     private async Task<JsonElement> ExtractMappingJsonAsync(string path, string sha, CancellationToken stoppingToken)
     {
         HttpClient? rawClient = _httpClientFactory.CreateClient("GithubRaw");
@@ -312,6 +323,7 @@ public class TokenMetadataWorker(
         return mappingJson;
     }
 
+    // Retrieves the current sync state from the database
     private async Task<SyncState?> GetSyncStateAsync(CancellationToken stoppingToken)
     {
         await using TokenMetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
