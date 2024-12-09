@@ -1,0 +1,30 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.002.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{F9D1E729-E8D6-434F-B6D9-5A3C836E237A}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Comp.Sync", "src\Comp.Sync\Comp.Sync.csproj", "{1CD9553C-5B31-47E6-B078-6C1CF1C43D84}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1CD9553C-5B31-47E6-B078-6C1CF1C43D84}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1CD9553C-5B31-47E6-B078-6C1CF1C43D84}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1CD9553C-5B31-47E6-B078-6C1CF1C43D84}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1CD9553C-5B31-47E6-B078-6C1CF1C43D84}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{1CD9553C-5B31-47E6-B078-6C1CF1C43D84} = {F9D1E729-E8D6-434F-B6D9-5A3C836E237A}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {4B70C177-75B0-476B-82E7-CF3AED6AEB3B}
+	EndGlobalSection
+EndGlobal
