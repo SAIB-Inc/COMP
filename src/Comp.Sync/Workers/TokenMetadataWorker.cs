@@ -158,31 +158,24 @@ public class TokenMetadataWorker(
     // Saves token metadata to the database
     private async Task SaveTokenMetadataAsync(JsonElement mappingJson, CancellationToken stoppingToken)
     {
-        if (!mappingJson.TryGetProperty("subject", out JsonElement subjectElement) ||
-            !mappingJson.TryGetProperty("name", out JsonElement nameElement) ||
-            !nameElement.TryGetProperty("value", out JsonElement nameValueElement) ||
-            !mappingJson.TryGetProperty("description", out JsonElement descElement) ||
-            !descElement.TryGetProperty("value", out JsonElement descValueElement))
+        // Extract required properties with error handling for missing or invalid data
+        if (!TryGetRequiredStringProperty(mappingJson, "subject", out string subject) ||
+            !TryGetRequiredStringProperty(mappingJson, "name.value", out string name) ||
+            !TryGetRequiredStringProperty(mappingJson, "description.value", out string description))
         {
-            _logger.LogWarning("Skipping token metadata - missing required properties");
+            _logger.LogWarning("Skipping token metadata - missing required properties or invalid structure.");
             return;
         }
 
-        string subject = subjectElement.GetString()!;
-        string name = nameValueElement.GetString()!;
-        string description = descValueElement.GetString()!;
+        // Extract optional properties with defaults if missing or invalid
+        string url = TryGetStringProperty(mappingJson, "url.value") ?? string.Empty;
+        string logo = TryGetStringProperty(mappingJson, "logo.value") ?? string.Empty;
+        int decimals = TryGetIntProperty(mappingJson, "decimals.value") ?? 0;
+        string ticker = TryGetStringProperty(mappingJson, "ticker.value") ?? string.Empty;
 
-        string url = mappingJson.TryGetProperty("url", out JsonElement urlElement)
-            ? urlElement.GetProperty("value").GetString() ?? string.Empty : string.Empty;
-        string logo = mappingJson.TryGetProperty("logo", out JsonElement logoElement)
-            ? logoElement.GetProperty("value").GetString() ?? string.Empty : string.Empty;
-        int decimals = mappingJson.TryGetProperty("decimals", out JsonElement decimalsElement)
-            ? decimalsElement.GetProperty("value").GetInt32() : 0;
-        string ticker = mappingJson.TryGetProperty("ticker", out JsonElement tickerElement)
-            ? tickerElement.GetProperty("value").GetString() ?? string.Empty : string.Empty;
-
+        // Create and save the token metadata in the database
         await using TokenMetadataDbContext? dbContext = await _dbContextFactory.CreateDbContextAsync(stoppingToken);
-
+        
         await dbContext.TokenMetadata.AddAsync(new TokenMetadata
         {
             Subject = subject,
@@ -197,8 +190,71 @@ public class TokenMetadataWorker(
         await dbContext.SaveChangesAsync(stoppingToken);
         await dbContext.DisposeAsync();
 
-        _logger.LogInformation("Saved metadata for subject {subject}", subject);
+        _logger.LogInformation("Saved metadata for subject: {Subject}", subject);
     }
+
+    // Helper method to try getting a required string property from JSON
+    private bool TryGetRequiredStringProperty(JsonElement jsonElement, string propertyPath, out string value)
+    {
+        value = string.Empty;
+        try
+        {
+            JsonElement property = GetPropertyByPath(jsonElement, propertyPath);
+            value = property.GetString() ?? string.Empty;
+            return !string.IsNullOrEmpty(value);
+        }
+        catch
+        {
+            _logger.LogWarning("Missing or invalid property: {PropertyPath}", propertyPath);
+            return false;
+        }
+    }
+
+    // Helper method to try getting an optional string property
+    private string TryGetStringProperty(JsonElement jsonElement, string propertyPath)
+    {
+        try
+        {
+            JsonElement property = GetPropertyByPath(jsonElement, propertyPath);
+            return property.GetString() ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    // Helper method to try getting an optional integer property
+    private int? TryGetIntProperty(JsonElement jsonElement, string propertyPath)
+    {
+        try
+        {
+            JsonElement property = GetPropertyByPath(jsonElement, propertyPath);
+            return property.GetInt32();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // Helper method to extract a property by its path (dot-separated)
+    private JsonElement GetPropertyByPath(JsonElement jsonElement, string path)
+    {
+        string[] parts = path.Split('.');
+        JsonElement currentElement = jsonElement;
+
+        foreach (string part in parts)
+        {
+            if (currentElement.TryGetProperty(part, out JsonElement nextElement))
+            {
+                currentElement = nextElement;
+            }
+        }
+
+        return currentElement;
+    }
+
 
     // Fetches a page of commits from the Github API
     private async Task<IEnumerable<GitCommit>?> FetchCommitPageAsync(int page, CancellationToken stoppingToken)

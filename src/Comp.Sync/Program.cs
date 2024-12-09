@@ -5,7 +5,7 @@ using Comp.Sync.Workers;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddDbContextFactory<TokenMetadataDbContext>(options =>
@@ -33,7 +33,7 @@ builder.Services.AddHttpClient("GithubRaw", client =>
 });
 
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 app.UseHttpsRedirection();
 if (app.Environment.IsDevelopment())
 {

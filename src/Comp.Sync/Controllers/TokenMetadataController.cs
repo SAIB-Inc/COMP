@@ -25,9 +25,9 @@ public class TokenMetadataController : ControllerBase
     [HttpGet("{subject}")]
     public async Task<IActionResult> Get(string subject)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync();
+        await using TokenMetadataDbContext db = await _dbFactory.CreateDbContextAsync();
 
-        var metadataEntry = await db.TokenMetadata
+        TokenMetadata? metadataEntry = await db.TokenMetadata
             .FirstOrDefaultAsync(tmd => tmd.Subject.ToLower() == subject.ToLower());
 
         if (metadataEntry is not null)
@@ -44,8 +44,8 @@ public class TokenMetadataController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<PaginatedResponse<TokenMetadata>>> Search([FromQuery] SearchTokenMetadataDto search)
     {
-        await using var context = await _dbFactory.CreateDbContextAsync();
-        var query = context.TokenMetadata.AsQueryable();
+        await using TokenMetadataDbContext context = await _dbFactory.CreateDbContextAsync();
+        IQueryable<TokenMetadata> query = context.TokenMetadata.AsQueryable();
         
         if (!string.IsNullOrWhiteSpace(search.Name))
             query = query.Where(t => EF.Functions.ILike(t.Name, $"%{search.Name}%"));
@@ -67,8 +67,8 @@ public class TokenMetadataController : ControllerBase
             _ => search.SortDescending ? query.OrderByDescending(t => t.Subject) : query.OrderBy(t => t.Subject)
         };
 
-        var totalCount = await query.CountAsync();
-        var items = await query
+        int totalCount = await query.CountAsync();
+        List<TokenMetadata> items = await query
             .Skip(search.Offset)
             .Take(search.Limit)
             .ToListAsync();
