@@ -1,6 +1,6 @@
 namespace Cardano.Metadata.Models.Github;
 
 public record GitTreeItem
-(
-    string? Path
-);
+{
+    public string? Path { get; set; }
+}

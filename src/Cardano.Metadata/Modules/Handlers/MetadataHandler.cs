@@ -1,4 +1,4 @@
-using Cardano.Metadata.Data;
+using Cardano.Metadata.Models;
 using Cardano.Metadata.Models.Entity;
 using Microsoft.EntityFrameworkCore;
 using LinqKit;
@@ -46,7 +46,7 @@ public class MetadataHandler
         bool requireTicker = !(includeEmptyTicker ?? false);
 
         using MetadataDbContext db = await _dbContextFactory.CreateDbContextAsync();
-        List<string> distinctSubjects = subjects.Distinct().ToList();
+        List<string> distinctSubjects = [.. subjects.Distinct()];
 
         ExpressionStarter<TokenMetadata> predicate = PredicateBuilder.New<TokenMetadata>(false);
 
@@ -56,7 +56,7 @@ public class MetadataHandler
         {
             predicate = predicate.And(token =>
                 token.Subject.Substring(0, 56)
-                    .Equals(policyId, System.StringComparison.OrdinalIgnoreCase));
+                    .Equals(policyId, StringComparison.OrdinalIgnoreCase));
         }
         if (requireName)
             predicate = predicate.And(token => !string.IsNullOrEmpty(token.Name));

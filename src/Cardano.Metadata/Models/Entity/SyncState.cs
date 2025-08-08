@@ -1,7 +1,7 @@
 namespace Cardano.Metadata.Models.Entity;
 
 public record SyncState
-(
-    string Hash,
-    DateTimeOffset Date
-);
+{
+    public string Hash { get; set; } = string.Empty;
+    public DateTimeOffset Date { get; set; }
+}

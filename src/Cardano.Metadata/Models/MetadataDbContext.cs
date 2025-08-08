@@ -1,7 +1,7 @@
 using Cardano.Metadata.Models.Entity;
 using Microsoft.EntityFrameworkCore;
 
-namespace Cardano.Metadata.Data;
+namespace Cardano.Metadata.Models;
 
 public class MetadataDbContext(DbContextOptions<MetadataDbContext> options) : DbContext(options)
 {
