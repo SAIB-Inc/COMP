@@ -1,8 +1,8 @@
 namespace Cardano.Metadata.Models.Github;
 
 public record GitCommitAuthor
-(
-    string? Name,
-    string? Email,
-    DateTime? Date
-);
+{
+    public string? Name { get; set; }
+    public string? Email { get; set; }
+    public DateTimeOffset? Date { get; set; }
+}

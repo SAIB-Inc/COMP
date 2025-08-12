@@ -1,9 +1,9 @@
 namespace Cardano.Metadata.Models.Github;
 
 public record GitCommit
-(
-    string? Sha,
-    string? Url,
-    GitCommitInfo? Commit,
-    IEnumerable<GitCommitFile>? Files
-);
+{
+    public string? Sha { get; set; }
+    public string? Url { get; set; }
+    public GitCommitInfo? Commit { get; set; }
+    public IEnumerable<GitCommitFile>? Files { get; set; }
+}

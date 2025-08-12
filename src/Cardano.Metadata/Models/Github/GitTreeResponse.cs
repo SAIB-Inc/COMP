@@ -1,6 +1,6 @@
 namespace Cardano.Metadata.Models.Github;
 
 public record GitTreeResponse
-(
-    GitTreeItem[]? Tree
-);
+{
+    public GitTreeItem[]? Tree { get; set; }
+}

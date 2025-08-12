@@ -19,17 +19,29 @@ public class GithubService
         return commits?.FirstOrDefault();
     }
 
-    public async Task<GitTreeResponse> GetGitTreeAsync(string commitSha, CancellationToken cancellationToken)
+    public async Task<GitTreeResponse?> GetGitTreeAsync(string commitSha, CancellationToken cancellationToken)
     {
         string treeUrl = $"https://api.github.com/repos/{_registryOwner}/{_registryRepo}/git/trees/{commitSha}?recursive=true";
         GitTreeResponse? gitTreeResponse = await _httpClient.GetFromJsonAsync<GitTreeResponse>(treeUrl, cancellationToken);
-        return gitTreeResponse ?? throw new InvalidOperationException("GitTreeResponse is null.");
+        return gitTreeResponse;
     }
 
     public async Task<JsonElement> GetMappingJsonAsync(string commitSha, string filePath, CancellationToken cancellationToken)
     {
         string rawUrl = $"https://raw.githubusercontent.com/{_registryOwner}/{_registryRepo}/{commitSha}/{filePath}";
-        JsonElement mappingJson = await _httpClient.GetFromJsonAsync<JsonElement>(rawUrl, cancellationToken: cancellationToken);
-        return mappingJson;
+        return await GetMappingJsonAsync<JsonElement>(rawUrl, cancellationToken);
+    }
+
+    public async Task<T?> GetMappingJsonAsync<T>(string rawUrl, CancellationToken cancellationToken)
+    {
+        return await _httpClient.GetFromJsonAsync<T>(rawUrl, cancellationToken: cancellationToken);
+    }
+
+    public async Task<IEnumerable<GitCommit>?> GetCommitPageAsync(DateTimeOffset lastSync, int page, CancellationToken cancellationToken)
+    {
+
+        string commitsUrl = $"https://api.github.com/repos/{_registryOwner}/{_registryRepo}/commits?since={lastSync.AddSeconds(1):yyyy-MM-dd'T'HH:mm:ssZ}&page={page}";
+        IEnumerable<GitCommit>? commitPage = await _httpClient.GetFromJsonAsync<IEnumerable<GitCommit>>(commitsUrl, cancellationToken);
+        return commitPage;
     }
 }
