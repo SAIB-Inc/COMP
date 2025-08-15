@@ -12,6 +12,12 @@
   <a href="https://github.com/SAIB-Inc/COMP/graphs/contributors">
     <img src="https://img.shields.io/github/contributors/SAIB-Inc/COMP.svg?style=flat-square" alt="Contributors">
   </a>
+  <a href="https://github.com/SAIB-Inc/Chrysalis">
+    <img src="https://img.shields.io/badge/Chrysalis-C%23%20Serialization-blue?style=flat-square" alt="Chrysalis">
+  </a>
+  <a href="https://github.com/SAIB-Inc/Argus">
+    <img src="https://img.shields.io/badge/Argus-Blockchain%20Indexer-green?style=flat-square" alt="Argus">
+  </a>
   <br>
   <a href="https://dotnet.microsoft.com/download">
     <img src="https://img.shields.io/badge/.NET-9.0-512BD4?style=flat-square" alt=".NET">
@@ -26,17 +32,18 @@
 
 ## 📖 Overview
 
-The Cardano Open Metadata Project (COMP) is a high-performance synchronization and API service that provides instant access to all types of Cardano blockchain metadata. It aggregates metadata from multiple sources including the [Cardano Token Registry](https://github.com/cardano-foundation/cardano-token-registry), on-chain metadata, NFT metadata, and other Cardano metadata standards, exposing everything through blazing-fast REST APIs with advanced querying capabilities.
+The Cardano Open Metadata Project (COMP) is a unified metadata specification and high-performance reference implementation for the Cardano blockchain. COMP defines standardized REST APIs that aggregate all Cardano metadata types - tokens, NFTs, stake pools, and DReps - from multiple sources into a single, queryable interface. Built with modern .NET 9.0 and PostgreSQL, our reference implementation demonstrates sub-millisecond query performance while establishing COMP as the definitive metadata standard for the Cardano ecosystem.
 
 **Key Features:**
 
-- 🔄 **Multi-Source Synchronization** - Aggregates metadata from token registry, on-chain data, and other sources
+- 🔄 **Multi-Source Aggregation** - Unifies metadata from token registry, on-chain data, stake pools, and DReps
 - ⚡ **High-Performance APIs** - Sub-millisecond response times with optimized queries
-- 🔍 **Universal Search** - Full-text search across all metadata types (tokens, NFTs, pools, etc.)
+- 🔍 **Universal Search** - Full-text search across all metadata types (tokens, NFTs, pools, DReps)
 - 📦 **Batch Operations** - Retrieve metadata for multiple assets in a single request
 - 🎯 **Smart Filtering** - Filter by policy ID, metadata type, and custom criteria
 - 📊 **Pagination Support** - Efficient handling of large result sets
 - 🏷️ **CIP Standards Support** - Compatible with CIP-25 (NFTs), CIP-68 (datums), and other metadata standards
+- 🔧 **Built on Proven Libraries** - Leverages [Chrysalis](https://github.com/SAIB-Inc/Chrysalis) (C# serialization) and [Argus](https://github.com/SAIB-Inc/Argus) (blockchain indexer)
 
 ## 🏗️ Architecture
 
@@ -44,8 +51,10 @@ The Cardano Open Metadata Project (COMP) is a high-performance synchronization a
 
 ```mermaid
 graph LR
-    A[GitHub Token Registry] -->|Sync| B[GitHub Worker]
+    A[Token Registry] -->|Sync| B[Aggregation Worker]
     G[On-Chain Metadata] -->|via Indexers| B
+    H[Pool Metadata] -->|Sync| B
+    I[Governance Data] -->|Sync| B
     B --> C[PostgreSQL Database]
     C --> D[Metadata Handler]
     D --> E[FastEndpoints API]
@@ -53,6 +62,8 @@ graph LR
     
     style A fill:#f9f,stroke:#333,stroke-width:2px
     style G fill:#fcf,stroke:#333,stroke-width:2px
+    style H fill:#ffc,stroke:#333,stroke-width:2px
+    style I fill:#cff,stroke:#333,stroke-width:2px
     style C fill:#9cf,stroke:#333,stroke-width:2px
     style E fill:#9f9,stroke:#333,stroke-width:2px
 ```
@@ -61,11 +72,11 @@ graph LR
 
 | Component | Description | Responsibility |
 |-----------|-------------|----------------|
-| **GithubWorker** | Background service | Syncs metadata from GitHub registry and other sources |
-| **GithubService** | GitHub API client | Handles API calls to fetch commits, trees, and raw files |
+| **Aggregation Worker** | Background service | Syncs metadata from all sources (tokens, NFTs, pools, DReps) |
+| **Source Services** | API clients | Handles integration with various metadata sources |
 | **MetadataDbService** | Database layer | Manages all metadata persistence and queries |
 | **MetadataHandler** | Business logic | Implements querying logic with advanced filtering |
-| **API Endpoints** | REST endpoints | Exposes metadata through GET and POST endpoints |
+| **API Endpoints** | REST endpoints | Exposes unified metadata through standardized APIs |
 
 ## 🚀 Quick Start
 
@@ -206,168 +217,114 @@ POST /metadata
 }
 ```
 
-## 🔄 Synchronization Process
+## 🔄 Synchronization Architecture
 
-### Initial Synchronization
+The COMP specification defines a robust synchronization architecture that:
 
-When the service starts for the first time:
+### Data Aggregation
+- **Multi-Source Integration** - Aggregates from token registries, on-chain data, pool metadata, and governance sources
+- **Real-time Updates** - Monitors and processes changes across all metadata sources
+- **Data Normalization** - Standardizes different metadata formats into unified schema
+- **Conflict Resolution** - Handles updates from multiple sources with priority rules
 
-1. **Fetches Latest Commit** - Gets the most recent commit from all configured sources
-2. **Downloads Full Tree** - Retrieves the complete file tree recursively
-3. **Processes All Metadata** - Parses JSON files, on-chain data, and external sources
-4. **Stores Metadata** - Saves all valid metadata to PostgreSQL
-5. **Records Sync State** - Saves the commit hash and timestamp for each source
+### Implementation Requirements
+- **Incremental Sync** - Support for efficient delta updates
+- **Error Recovery** - Automatic retry mechanisms for failed synchronizations
+- **State Management** - Track synchronization status per source
+- **Data Validation** - Verify metadata integrity before storage
 
-### Incremental Synchronization
+## 🛠️ Technical Specifications
 
-After initial sync, the service:
+### Performance Requirements
 
-1. **Checks for New Data** - Polls for new commits and on-chain updates
-2. **Processes Changes** - Only updates modified metadata entries
-3. **Handles All Operations** - Intelligently adds, updates, or removes metadata
-4. **Updates Sync State** - Records the latest processed state for each source
+- **Query Response Time** - Sub-millisecond for single asset lookups
+- **Batch Processing** - Support for querying 100+ assets in single request
+- **Search Performance** - Full-text search across millions of metadata entries
 
-**Sync Interval:** 1 minute between cycles  
-**Error Recovery:** 30-second retry on failures
+- **Data Freshness** - Maximum 1-minute delay for metadata updates
 
-## 🛠️ Technical Details
-
-### Database Schema
-
-#### TokenMetadata Table
-```sql
-CREATE TABLE "TokenMetadata" (
-    "Subject" TEXT PRIMARY KEY,
-    "Name" TEXT NOT NULL,
-    "Ticker" TEXT NOT NULL,
-    "PolicyId" TEXT NOT NULL,
-    "Decimals" INTEGER NOT NULL,
-    "Policy" TEXT,
-    "Url" TEXT,
-    "Logo" TEXT,
-    "Description" TEXT
-);
-
-CREATE INDEX "IX_TokenMetadata_Name_Description_Ticker" 
-ON "TokenMetadata" ("Name", "Description", "Ticker");
-```
-
-#### SyncState Table
-```sql
-CREATE TABLE "SyncState" (
-    "Hash" TEXT PRIMARY KEY,
-    "Date" TIMESTAMPTZ NOT NULL
-);
-```
-
-### Performance Optimizations
-
-- **Database Context Factory** - Efficient context lifecycle management
-- **AsNoTracking Queries** - Read-only queries without change tracking
-- **Dynamic Predicate Building** - Optimized query construction with LinqKit
-- **Batch Deduplication** - Automatic removal of duplicate subjects
-- **PostgreSQL ILIKE** - Native case-insensitive pattern matching
-- **Indexed Columns** - Strategic indexing for search performance
 
 ### Metadata Types Supported
 
-- **Native Tokens** - FT and NFT metadata from token registry
+- **Native Tokens** - Fungible token and NFT metadata from registries
 - **CIP-25** - NFT metadata standard
 - **CIP-68** - Reference NFT standard with datum metadata
-- **Pool Metadata** - Stake pool information
-- **DApp Metadata** - Decentralized application metadata
+- **Stake Pools** - Pool metadata, performance metrics, and delegation info
+- **Governance/DReps** - Delegated representative profiles, proposals, and voting data
 - **Transaction Metadata** - Custom metadata attached to transactions
-- **Off-chain Metadata** - IPFS, Arweave, and other storage solutions
 
-### Error Handling
+### Error Handling Standards
 
-The service implements comprehensive error handling:
+COMP implementations must handle:
 
-- **Network Failures** - Automatic retry with exponential backoff
-- **Malformed Data** - Individual errors don't break the sync
-- **API Rate Limits** - Respects limits with proper authentication
-- **Database Conflicts** - Handles concurrent updates gracefully
-- **Invalid Data** - Validates all metadata before persistence
+- **Network Resilience** - Retry mechanisms with exponential backoff
+- **Data Validation** - Reject malformed metadata without breaking sync
+- **Rate Limiting** - Respect source API limits and implement throttling
+- **Concurrency** - Handle simultaneous updates without data corruption
+- **Graceful Degradation** - Continue operating with partial source availability
 
-## 📦 Dependencies
+## 📦 Reference Implementation Stack
 
-### Core Framework
-- **.NET 9.0** - Latest LTS version with performance improvements
-- **ASP.NET Core** - Web framework for hosting APIs
+Our reference implementation demonstrates the COMP specification using:
 
-### Key Libraries
-- **FastEndpoints 5.31.0** - Lightweight, high-performance API framework
-- **Entity Framework Core 9.0** - Modern ORM with PostgreSQL support
-- **Npgsql 9.0.4** - High-performance PostgreSQL driver
-- **LinqKit 9.0.8** - Dynamic LINQ query building
-- **Scalar 1.2.19** - API documentation UI
+### Core Technologies
+- **.NET 9.0** - High-performance runtime with modern C# features
+- **PostgreSQL** - Scalable database for metadata storage
+- **FastEndpoints** - Lightweight API framework for REST endpoints
 
-### Development Tools
-- **Microsoft.CodeAnalysis** - Roslyn compiler platform
-- **EF Core Design Tools** - Database migrations and scaffolding
+### Integration Libraries
+- **[Chrysalis](https://github.com/SAIB-Inc/Chrysalis)** - Cardano serialization library for C#
+- **[Argus](https://github.com/SAIB-Inc/Argus)** - Blockchain indexer for on-chain metadata
+- **Entity Framework Core** - Data access layer
+- **LinqKit** - Dynamic query composition
 
-## 🧪 Testing
+## 🧪 Testing & Validation
 
-### Running Tests
-```bash
-dotnet test
-```
+Implementations of COMP should include:
 
-### Integration Testing
-The service can be tested using the provided Swagger/Scalar UI:
+- **Unit Tests** - Test individual components and data transformations
+- **Integration Tests** - Verify end-to-end metadata flow
+- **Performance Tests** - Validate response time requirements
+- **Load Tests** - Ensure system handles concurrent requests
+- **Data Validation** - Verify metadata accuracy and completeness
 
-1. Navigate to `https://localhost:7276/swagger` (Development mode)
-2. Test endpoints directly from the browser
-3. View request/response examples
+## 🚢 Deployment Guidelines
 
-## 🚢 Deployment
+COMP implementations should support:
 
-### Environment Variables
-```bash
-# Database
-ConnectionStrings__DefaultConnection=Host=postgres;Database=cardano_metadata;Username=user;Password=pass
+### Configuration Management
+- **Environment Variables** - Secure configuration for production
+- **Connection Strings** - Database and external service connections
+- **API Keys** - Authentication for metadata sources
+- **Feature Flags** - Enable/disable specific metadata types
 
-# GitHub Configuration
-GithubPAT=ghp_xxxxxxxxxxxxxxxxxxxx
-RegistryOwner=cardano-foundation
-RegistryRepo=cardano-token-registry
+### Infrastructure Requirements
+- **Horizontal Scaling** - Support for multiple instances
+- **Load Balancing** - Distribute requests across instances
+- **Database Replication** - Read replicas for query performance
 
-# ASP.NET Core
-ASPNETCORE_ENVIRONMENT=Production
-```
+## 📊 Monitoring & Observability
 
-## 📊 Monitoring
+### Required Health Checks
+- **Service Health** - Overall system status endpoint
+- **Database Connectivity** - Connection pool and query health
+- **Source Availability** - Status of each metadata source
+- **Sync Status** - Last successful sync per source
 
-### Health Checks
-Monitor service health through:
-- Database connectivity status
-- GitHub API availability
-- Sync state freshness
-- API response times
+### Key Metrics
+- **API Latency** - Response times
+- **Throughput** - Requests per second by endpoint
+- **Error Rates** - Failed requests and sync errors
+- **Data Freshness** - Time since last update per metadata type
 
-### Metrics
-Key metrics to track:
-- Tokens synchronized per minute
-- API request latency (p50, p95, p99)
-- Database query performance
-- GitHub API rate limit usage
+## 🔒 Security Requirements
 
-## 🔒 Security Considerations
+COMP implementations must include:
 
-- **API Authentication** - Currently public; implement API keys for production
-- **Rate Limiting** - Add rate limiting to prevent abuse
-- **Input Validation** - All inputs are validated and sanitized
-- **SQL Injection** - Protected through Entity Framework parameterization
-- **Secrets Management** - Use Azure Key Vault or similar for production
-
-## 🗺️ Roadmap
-
-- [ ] **Extended Metadata Support** - Add support for NFT metadata, pool metadata, and transaction metadata (currently only token registry)
-- [ ] **API Rate Limiting** - Add rate limiting to protect the service
-- [ ] **Response Caching** - Cache frequently requested metadata
-- [ ] **API Authentication** - Simple API key authentication
-- [ ] **Health Checks** - Add /health endpoint for monitoring
-- [ ] **Performance Metrics** - Basic request/response metrics
+- **Rate Limiting** - Configurable limits per client/endpoint
+- **Input Validation** - Sanitize and validate all user inputs
+- **Secrets Management** - Secure storage for credentials and keys
+- **CORS Policy** - Configure appropriate cross-origin policies
 
 ## 🤝 Contributing
 
@@ -384,13 +341,6 @@ We welcome contributions! Please follow these steps:
 - Write unit tests for new features
 - Update documentation as needed
 - Ensure all tests pass before submitting PR
-
-
-## 🙏 Acknowledgments
-
-- [Cardano Foundation](https://cardanofoundation.org/) for maintaining the token registry
-- [FastEndpoints](https://fast-endpoints.com/) for the excellent API framework
-- The Cardano community for continuous support
 
 ---
 
