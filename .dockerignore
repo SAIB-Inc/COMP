@@ -1,0 +1,19 @@
+# Build artifacts
+**/bin/
+**/obj/
+
+# VCS
+.git
+.gitignore
+
+# IDE/editor
+.vs
+.vscode
+*.user
+*.suo
+
+# Docker (keep Dockerfile in context)
+
+# Misc
+*.log
+node_modules

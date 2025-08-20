@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:16-alpine
@@ -18,6 +16,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comp-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Bind to this port inside the container
+      PORT: "8080"
+      # Pass your GitHub PAT from host env (optional here; set in shell/CI)
+      GithubPAT: ${GithubPAT:-}
+      # Connect to the compose Postgres service
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=cardano_metadata;Username=postgres;Password=postgres
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "8080:8080"
 
 volumes:
   pgdata:
