@@ -16,10 +16,10 @@ public class MetadataDbService
 
         if (string.IsNullOrEmpty(token.Subject) ||
             string.IsNullOrEmpty(token.Name) ||
-            string.IsNullOrEmpty(token.Ticker) ||
+            string.IsNullOrEmpty(token.Description) ||
             token.Decimals < 0)
         {
-            logger.LogWarning("Invalid token data. Name, Ticker, Subject or Decimals cannot be null or empty.");
+            logger.LogWarning("Invalid token data. Subject, Name, Description required; Decimals must be non-negative if present.");
             return null;
         }
 
@@ -101,11 +101,12 @@ public class MetadataDbService
             return null;
         }
 
-        if (string.IsNullOrEmpty(updated.Name) ||
-           string.IsNullOrEmpty(updated.Ticker) ||
-           updated.Decimals < 0)
+        if (string.IsNullOrEmpty(updated.Subject) ||
+            string.IsNullOrEmpty(updated.Name) ||
+            string.IsNullOrEmpty(updated.Description) ||
+            updated.Decimals < 0)
         {
-            logger.LogWarning("Invalid token data. Name, Ticker, Subject or Decimals cannot be null or empty.");
+            logger.LogWarning("Invalid token data. Subject, Name, Description required; Decimals must be non-negative if present.");
             return null;
         }
 

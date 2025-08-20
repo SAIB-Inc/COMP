@@ -135,12 +135,17 @@ public class GithubWorker
 
         var subject = resp.Subject;
         var name = resp.Name?.Value;
-        var ticker = resp.Ticker?.Value;
+        var description = resp.Description?.Value;
+        var ticker = resp.Ticker?.Value ?? string.Empty; // optional
 
-        if (string.IsNullOrEmpty(subject) || string.IsNullOrEmpty(name) || string.IsNullOrEmpty(ticker))
+        if (string.IsNullOrEmpty(subject))
         {
-            logger.LogWarning("Invalid token data. Subject: {Subject}, Name: {Name}, Ticker: {Ticker}", 
-                subject ?? "null", name ?? "null", ticker ?? "null");
+            logger.LogWarning("Invalid token data. Missing subject; skipping.");
+            return null;
+        }
+        if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(description))
+        {
+            logger.LogWarning("Invalid token data. Subject: {Subject}, Name: {Name}, Description: {Description}", subject, name ?? "null", description ?? "null");
             return null;
         }
 
@@ -157,7 +162,7 @@ public class GithubWorker
             PolicyId = subject.Length >= 56 ? subject[..56] : string.Empty,
             Name = name,
             Ticker = ticker,
-            Description = resp.Description?.Value,
+            Description = description,
             Url = resp.Url?.Value,
             Logo = resp.Logo?.Value,
             Policy = resp.Policy,
