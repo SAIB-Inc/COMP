@@ -1,4 +1,4 @@
-namespace Cardano.Metadata.Models.Github;
+namespace Comp.Models.Github;
 
 public record GitCommitInfo
 {

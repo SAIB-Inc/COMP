@@ -1,4 +1,4 @@
-namespace Cardano.Metadata.Models.Request;
+namespace Comp.Models.Request;
 
 public record GetTokenMetadataRequest
 {

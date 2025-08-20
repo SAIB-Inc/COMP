@@ -1,10 +1,10 @@
 using System.Text.Json;
-using Cardano.Metadata.Models.Entity;
-using Cardano.Metadata.Models.Github;
-using Cardano.Metadata.Models.Response;
-using Cardano.Metadata.Services;
+using Comp.Models.Entity;
+using Comp.Models.Github;
+using Comp.Models.Response;
+using Comp.Services;
 
-namespace Cardano.Metadata.Workers;
+namespace Comp.Workers;
 public class GithubWorker
 (
     ILogger<GithubWorker> logger,

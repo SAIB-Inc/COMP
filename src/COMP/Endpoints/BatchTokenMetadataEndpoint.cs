@@ -1,8 +1,8 @@
 using FastEndpoints;
-using Cardano.Metadata.Modules.Handlers;
-using Cardano.Metadata.Models.Request;
+using Comp.Modules.Handlers;
+using Comp.Models.Request;
 
-namespace Cardano.Metadata.Endpoints;
+namespace Comp.Endpoints;
 
 public class BatchTokenMetadataEndpoint(MetadataHandler metadataHandler) : Endpoint<BatchTokenMetadataRequest>
 {

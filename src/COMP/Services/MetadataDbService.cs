@@ -1,9 +1,9 @@
-using Cardano.Metadata.Models.Entity;
-using Cardano.Metadata.Models;
+using Comp.Models.Entity;
+using Comp.Models;
 using Microsoft.EntityFrameworkCore;
-using Cardano.Metadata.Models.Github;
+using Comp.Models.Github;
 
-namespace Cardano.Metadata.Services;
+namespace Comp.Services;
 
 public class MetadataDbService
 (

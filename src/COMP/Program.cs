@@ -1,12 +1,12 @@
 using FastEndpoints;
 using FastEndpoints.Swagger;
-using Cardano.Metadata.Models;
+using Comp.Models;
 using Microsoft.EntityFrameworkCore;
-using Cardano.Metadata.Modules.Handlers;
+using Comp.Modules.Handlers;
 using System.Net.Http.Headers;
 using System.Reflection;
-using Cardano.Metadata.Services;
-using Cardano.Metadata.Workers;
+using Comp.Services;
+using Comp.Workers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -28,7 +28,7 @@ builder.Services.AddHttpClient("GithubApi", client =>
     client.BaseAddress = new Uri("https://api.github.com/");
     var productName = builder.Configuration["Github:UserAgent:ProductName"] ?? "CardanoTokenMetadataService";
     var productVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "Unknown Version";
-    var productUrl = builder.Configuration["Github:UserAgent:ProductUrl"] ?? "(+https://github.com/SAIB-Inc/Cardano.Metadata)";
+    var productUrl = builder.Configuration["Github:UserAgent:ProductUrl"] ?? "(+https://github.com/SAIB-Inc/COMP)";
     
     ProductInfoHeaderValue productValue = new(productName, productVersion);
     ProductInfoHeaderValue commentValue = new(productUrl);

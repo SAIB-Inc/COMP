@@ -1,7 +1,7 @@
 using System.Text.Json;
-using Cardano.Metadata.Models.Github;
+using Comp.Models.Github;
 
-namespace Cardano.Metadata.Services;
+namespace Comp.Services;
 
 public class GithubService
 (

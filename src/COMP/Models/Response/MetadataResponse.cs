@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Cardano.Metadata.Models.Response;
+namespace Comp.Models.Response;
 
 public record MetadataField<T>
 {
@@ -20,4 +20,3 @@ public record MetadataResponse
     [JsonPropertyName("logo")] public MetadataField<string>? Logo { get; set; }
     [JsonPropertyName("decimals")] public MetadataField<int>? Decimals { get; set; }
 }
-
