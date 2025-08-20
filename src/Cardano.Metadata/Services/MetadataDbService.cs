@@ -1,5 +1,4 @@
 using Cardano.Metadata.Models.Entity;
-using Cardano.Metadata.Models.Response;
 using Cardano.Metadata.Models;
 using Microsoft.EntityFrameworkCore;
 using Cardano.Metadata.Models.Github;
@@ -11,31 +10,18 @@ public class MetadataDbService
     ILogger<MetadataDbService> logger,
     IDbContextFactory<MetadataDbContext> _dbContextFactory)
 {
-    public async Task<TokenMetadata?> AddTokenAsync(RegistryItem registryItem, CancellationToken cancellationToken)
+    public async Task<TokenMetadata?> AddTokenAsync(TokenMetadata token, CancellationToken cancellationToken)
     {
         using MetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        if (string.IsNullOrEmpty(registryItem.Subject) ||
-            string.IsNullOrEmpty(registryItem.Name) ||
-            string.IsNullOrEmpty(registryItem.Ticker) ||
-            registryItem.Decimals < 0)
+        if (string.IsNullOrEmpty(token.Subject) ||
+            string.IsNullOrEmpty(token.Name) ||
+            string.IsNullOrEmpty(token.Ticker) ||
+            token.Decimals < 0)
         {
             logger.LogWarning("Invalid token data. Name, Ticker, Subject or Decimals cannot be null or empty.");
             return null;
         }
-
-        TokenMetadata token = new()
-        {
-            Subject = registryItem.Subject,
-            Name = registryItem.Name,
-            Ticker = registryItem.Ticker,
-            PolicyId = registryItem.Subject[..56],
-            Decimals = registryItem.Decimals,
-            Policy = registryItem.Policy,
-            Url = registryItem.Url,
-            Logo = registryItem.Logo,
-            Description = registryItem.Description
-        };
 
         await dbContext.TokenMetadata.AddAsync(token, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -101,41 +87,31 @@ public class MetadataDbService
         }
     }
     
-    public async Task<TokenMetadata?> UpdateTokenAsync(RegistryItem registryItem, CancellationToken cancellationToken)
+    public async Task<TokenMetadata?> UpdateTokenAsync(TokenMetadata updated, CancellationToken cancellationToken)
     {
         using MetadataDbContext dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         TokenMetadata? existingMetadata = await dbContext.TokenMetadata
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Subject == registryItem.Subject, cancellationToken);
+            .FirstOrDefaultAsync(t => t.Subject == updated.Subject, cancellationToken);
 
         if (existingMetadata is null)
         {
-            logger.LogWarning("Token metadata not found for subject {Subject}", registryItem.Subject);
+            logger.LogWarning("Token metadata not found for subject {Subject}", updated.Subject);
             return null;
         }
 
-        if (string.IsNullOrEmpty(registryItem.Name) ||
-           string.IsNullOrEmpty(registryItem.Ticker) ||
-           registryItem.Decimals < 0)
+        if (string.IsNullOrEmpty(updated.Name) ||
+           string.IsNullOrEmpty(updated.Ticker) ||
+           updated.Decimals < 0)
         {
             logger.LogWarning("Invalid token data. Name, Ticker, Subject or Decimals cannot be null or empty.");
             return null;
         }
 
-        TokenMetadata updatedMetadata = existingMetadata with
-        {
-            Name = registryItem.Name,
-            Ticker = registryItem.Ticker,
-            Decimals = registryItem.Decimals,
-            Policy = registryItem.Policy,
-            Url = registryItem.Url,
-            Logo = registryItem.Logo,
-            Description = registryItem.Description
-        };
-
-        dbContext.TokenMetadata.Update(updatedMetadata);
+        // Preserve immutable fields from existing if needed; here we accept the provided updated entity
+        dbContext.TokenMetadata.Update(updated);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return updatedMetadata;
+        return updated;
     }
 }

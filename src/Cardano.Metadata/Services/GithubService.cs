@@ -26,15 +26,15 @@ public class GithubService
         return gitTreeResponse;
     }
 
-    public async Task<JsonElement> GetMappingJsonAsync(string commitSha, string filePath, CancellationToken cancellationToken)
-    {
-        string rawUrl = $"https://raw.githubusercontent.com/{_registryOwner}/{_registryRepo}/{commitSha}/{filePath}";
-        return await GetMappingJsonAsync<JsonElement>(rawUrl, cancellationToken);
-    }
-
     public async Task<T?> GetMappingJsonAsync<T>(string rawUrl, CancellationToken cancellationToken)
     {
         return await _httpClient.GetFromJsonAsync<T>(rawUrl, cancellationToken: cancellationToken);
+    }
+
+    public async Task<T?> GetMappingJsonAsync<T>(string commitSha, string filePath, CancellationToken cancellationToken)
+    {
+        string rawUrl = $"https://raw.githubusercontent.com/{_registryOwner}/{_registryRepo}/{commitSha}/{filePath}";
+        return await GetMappingJsonAsync<T>(rawUrl, cancellationToken);
     }
 
     public async Task<IEnumerable<GitCommit>?> GetCommitPageAsync(DateTimeOffset lastSync, int page, CancellationToken cancellationToken)

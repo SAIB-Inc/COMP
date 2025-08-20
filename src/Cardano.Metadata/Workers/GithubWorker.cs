@@ -47,11 +47,11 @@ public class GithubWorker
                             bool exist = await metadataDbService.SubjectExistsAsync(subject, stoppingToken);
                             if (exist) continue;
 
-                            JsonElement mappingJson = await githubService.GetMappingJsonAsync(latestCommit.Sha, item.Path, stoppingToken);
-                            RegistryItem? registryItem = MapRegistryItem(mappingJson);
+                            var mapping = await githubService.GetMappingJsonAsync<MetadataResponse>(latestCommit.Sha, item.Path, stoppingToken);
+                            TokenMetadata? token = MapTokenMetadata(mapping);
 
-                            if (registryItem == null) continue;
-                            await metadataDbService.AddTokenAsync(registryItem, stoppingToken);
+                            if (token == null) continue;
+                            await metadataDbService.AddTokenAsync(token, stoppingToken);
                         }
                     }
                     await metadataDbService.UpsertSyncStateAsync(latestCommit, stoppingToken);
@@ -79,9 +79,9 @@ public class GithubWorker
 
                                 try
                                 {
-                                    JsonElement mappingJson = await githubService.GetMappingJsonAsync(resolvedCommit.Sha, file.Filename, stoppingToken);
-                                    RegistryItem? registryItem = MapRegistryItem(mappingJson);
-                                    if (registryItem is null) 
+                                    var mapping = await githubService.GetMappingJsonAsync<MetadataResponse>(resolvedCommit.Sha, file.Filename, stoppingToken);
+                                    TokenMetadata? token = MapTokenMetadata(mapping);
+                                    if (token is null) 
                                     {
                                         logger.LogWarning("Failed to map registry item for subject {Subject} in commit {Sha}", subject, resolvedCommit.Sha);
                                         continue;
@@ -90,11 +90,11 @@ public class GithubWorker
                                     bool exists = await metadataDbService.SubjectExistsAsync(subject, stoppingToken);
                                     if (exists)
                                     {
-                                        await metadataDbService.UpdateTokenAsync(registryItem, stoppingToken);
+                                        await metadataDbService.UpdateTokenAsync(token, stoppingToken);
                                     }
                                     else
                                     {
-                                        await metadataDbService.AddTokenAsync(registryItem, stoppingToken);
+                                        await metadataDbService.AddTokenAsync(token, stoppingToken);
                                     }
                                 }
                                 catch (HttpRequestException httpEx)
@@ -125,60 +125,44 @@ public class GithubWorker
         }
     }
 
-    public RegistryItem? MapRegistryItem(JsonElement mappingJson)
+    public TokenMetadata? MapTokenMetadata(MetadataResponse? resp)
     {
-        try
+        if (resp is null)
         {
-            var registryItem = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(mappingJson.GetRawText());
-            if (registryItem == null)
-            {
-                logger.LogWarning("Failed to deserialize mapping JSON");
-                return null;
-            }
-
-            // Helper method to safely extract values
-            string? GetStringValue(string key) =>
-                registryItem.TryGetValue(key, out var element) ? element.GetString() : null;
-
-            string? GetValuePropertyString(string key) =>
-                registryItem.TryGetValue(key, out var element) && element.TryGetProperty("value", out var valueElement)
-                    ? valueElement.GetString()
-                    : null;
-
-            int GetValuePropertyInt(string key, int defaultValue = 0) =>
-                registryItem.TryGetValue(key, out var element) && element.TryGetProperty("value", out var valueElement) && valueElement.TryGetInt32(out var value)
-                    ? value
-                    : defaultValue;
-
-            var subject = GetStringValue("subject");
-            var name = GetValuePropertyString("name");
-            var ticker = GetValuePropertyString("ticker");
-
-            // Validate required fields
-            if (string.IsNullOrEmpty(subject) || string.IsNullOrEmpty(name) || string.IsNullOrEmpty(ticker))
-            {
-                logger.LogWarning("Invalid token data. Subject: {Subject}, Name: {Name}, Ticker: {Ticker}", 
-                    subject ?? "null", name ?? "null", ticker ?? "null");
-                return null;
-            }
-
-            return new RegistryItem
-            {
-                Subject = subject,
-                Policy = GetStringValue("policy"),
-                Name = name,
-                Ticker = ticker,
-                Description = GetValuePropertyString("description"),
-                Url = GetValuePropertyString("url"),
-                Logo = GetValuePropertyString("logo"),
-                Decimals = GetValuePropertyInt("decimals", 0)
-            };
-        }
-        catch (JsonException ex)
-        {
-            logger.LogError(ex, "Error parsing registry item JSON");
+            logger.LogWarning("Mapping response is null");
             return null;
         }
+
+        var subject = resp.Subject;
+        var name = resp.Name?.Value;
+        var ticker = resp.Ticker?.Value;
+
+        if (string.IsNullOrEmpty(subject) || string.IsNullOrEmpty(name) || string.IsNullOrEmpty(ticker))
+        {
+            logger.LogWarning("Invalid token data. Subject: {Subject}, Name: {Name}, Ticker: {Ticker}", 
+                subject ?? "null", name ?? "null", ticker ?? "null");
+            return null;
+        }
+
+        var decimals = resp.Decimals?.Value ?? 0;
+        if (decimals < 0)
+        {
+            logger.LogWarning("Invalid decimals for subject {Subject}: {Decimals}", subject, decimals);
+            return null;
+        }
+
+        return new TokenMetadata
+        {
+            Subject = subject,
+            PolicyId = subject.Length >= 56 ? subject[..56] : string.Empty,
+            Name = name,
+            Ticker = ticker,
+            Description = resp.Description?.Value,
+            Url = resp.Url?.Value,
+            Logo = resp.Logo?.Value,
+            Policy = resp.Policy,
+            Decimals = decimals
+        };
     }
 
     private async Task<List<GitCommit>> GetLatestCommitsSinceAsync(DateTimeOffset lastSyncDate, CancellationToken stoppingToken)
