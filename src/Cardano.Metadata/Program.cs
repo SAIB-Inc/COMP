@@ -44,10 +44,7 @@ var app = builder.Build();
 
 app.UseHttpsRedirection();
 
-app.UseFastEndpoints(c =>
-{
-    c.Endpoints.RoutePrefix = "";
-});
+app.UseFastEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
