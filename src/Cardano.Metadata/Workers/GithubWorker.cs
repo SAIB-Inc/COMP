@@ -70,6 +70,11 @@ public class GithubWorker
                         {
                             if (file.Filename is not null)
                             {
+                                if (string.Equals(file.Status, "removed", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    logger.LogInformation("Skipping removed file {Filename} in commit {Sha}", file.Filename, resolvedCommit.Sha);
+                                    continue;
+                                }
                                 var subject = ExtractSubjectFromPath(file.Filename);
 
                                 try

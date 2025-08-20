@@ -7,6 +7,8 @@ using System.Net.Http.Headers;
 using System.Reflection;
 using Cardano.Metadata.Services;
 using Cardano.Metadata.Workers;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,14 +46,40 @@ var app = builder.Build();
 
 app.UseHttpsRedirection();
 
-app.UseFastEndpoints(c =>
-{
-    c.Endpoints.RoutePrefix = "";
-});
+app.UseFastEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwaggerGen();
+}
+
+// Ensure database is up-to-date on startup (migrate if migrations exist; otherwise create schema)
+using (var scope = app.Services.CreateScope())
+{
+    var loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
+    var logger = loggerFactory.CreateLogger("DbInitialization");
+    try
+    {
+        var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<MetadataDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+
+        var hasMigrations = db.Database.GetMigrations().Any();
+        if (hasMigrations)
+        {
+            await db.Database.MigrateAsync();
+            logger.LogInformation("Database migrated or already up-to-date.");
+        }
+        else
+        {
+            logger.LogInformation("No EF migrations found; ensuring database is created.");
+            await db.Database.EnsureCreatedAsync();
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Database initialization failed");
+        throw;
+    }
 }
 
 app.Run();
