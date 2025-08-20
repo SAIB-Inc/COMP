@@ -1,10 +1,10 @@
-using Cardano.Metadata.Models;
-using Cardano.Metadata.Models.Entity;
+using Comp.Models;
+using Comp.Models.Entity;
 using Microsoft.EntityFrameworkCore;
 using LinqKit;
 using Microsoft.CodeAnalysis;
 
-namespace Cardano.Metadata.Modules.Handlers;
+namespace Comp.Modules.Handlers;
 
 public class MetadataHandler
 (
