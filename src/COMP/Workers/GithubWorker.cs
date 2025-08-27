@@ -60,22 +60,7 @@ public class GithubWorker
                 {
                     List<GitCommit> latestCommitsSince = await GetLatestCommitsSinceAsync(syncState.Date, stoppingToken);
                     
-                    // Skip commits we've already processed
-                    string currentHash = syncState.Hash;
-                    int startIndex = latestCommitsSince.FindIndex(c => c.Sha == currentHash);
-                    if (startIndex >= 0)
-                    {
-                        // Skip to the next commit after the current one
-                        latestCommitsSince = [.. latestCommitsSince.Skip(startIndex + 1)];
-                        if (latestCommitsSince.Count == 0)
-                        {
-                            logger.LogInformation("No new commits to process since {Hash}", currentHash);
-                            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
-                            continue;
-                        }
-                    }
-                    
-                    logger.LogInformation("Processing {Count} new commits", latestCommitsSince.Count);
+
                     foreach (GitCommit commit in latestCommitsSince)
                     {
                         if (string.IsNullOrEmpty(commit.Url)) continue;
@@ -199,8 +184,6 @@ public class GithubWorker
             latestCommitsSince.AddRange(commitPage);
             page++;
         }
-
-        // Sort commits chronologically by commit date to ensure proper processing order
         return [.. latestCommitsSince.OrderBy(c => c.Commit?.Author?.Date ?? DateTimeOffset.MinValue)];
     }
 
