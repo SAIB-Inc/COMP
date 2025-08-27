@@ -51,7 +51,6 @@ public class MetadataDbService
         {
             string oldHash = existingSyncState.Hash;
             dbContext.SyncState.Remove(existingSyncState);
-            await dbContext.SaveChangesAsync(cancellationToken);
             logger.LogInformation("Removed old sync state with hash: {OldHash}", oldHash);
         }
 
