@@ -44,12 +44,13 @@ public class MetadataDbService
         DateTimeOffset newDate = latestCommit.Commit?.Author?.Date ?? DateTimeOffset.UtcNow;
 
         SyncState? existingSyncState = await dbContext.SyncState
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(ss => ss.Id == 1, cancellationToken);
 
         if (existingSyncState is null)
         {
             var syncState = new SyncState
             {
+                Id = 1,
                 Hash = newSha,
                 Date = newDate
             };
@@ -58,10 +59,11 @@ public class MetadataDbService
         }
         else
         {
+            string oldHash = existingSyncState.Hash;
             existingSyncState.Hash = newSha;
             existingSyncState.Date = newDate;
             dbContext.SyncState.Update(existingSyncState);
-            logger.LogInformation("Sync state updated from {OldHash} to {NewHash}", existingSyncState.Hash, newSha);
+            logger.LogInformation("Sync state updated from {OldHash} to {NewHash}", oldHash, newSha);
         }
         await dbContext.SaveChangesAsync(cancellationToken);
     }

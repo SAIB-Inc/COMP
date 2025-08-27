@@ -15,6 +15,6 @@ public class MetadataDbContext(DbContextOptions<MetadataDbContext> options) : Db
         .HasIndex(tmd => new { tmd.Name, tmd.Description, tmd.Ticker })
         .HasDatabaseName("IX_TokenMetadata_Name_Description_Ticker");
 
-        modelBuilder.Entity<SyncState>().HasKey(ss => ss.Hash);
+        modelBuilder.Entity<SyncState>().HasKey(ss => ss.Id);
     }
 }
