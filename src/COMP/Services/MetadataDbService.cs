@@ -43,27 +43,26 @@ public class MetadataDbService
         string newSha = latestCommit.Sha ?? string.Empty;
         DateTimeOffset newDate = latestCommit.Commit?.Author?.Date ?? DateTimeOffset.UtcNow;
 
+        // Delete existing sync state if it exists
         SyncState? existingSyncState = await dbContext.SyncState
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (existingSyncState is null)
+        if (existingSyncState is not null)
         {
-            var syncState = new SyncState
-            {
-                Hash = newSha,
-                Date = newDate
-            };
-            await dbContext.SyncState.AddAsync(syncState, cancellationToken);
-            logger.LogInformation("Sync state created with hash: {Hash}", newSha);
+            string oldHash = existingSyncState.Hash;
+            dbContext.SyncState.Remove(existingSyncState);
+            logger.LogInformation("Removed old sync state with hash: {OldHash}", oldHash);
         }
-        else
+
+        // Insert new sync state
+        var syncState = new SyncState
         {
-            existingSyncState.Hash = newSha;
-            existingSyncState.Date = newDate;
-            dbContext.SyncState.Update(existingSyncState);
-            logger.LogInformation("Sync state updated from {OldHash} to {NewHash}", existingSyncState.Hash, newSha);
-        }
+            Hash = newSha,
+            Date = newDate
+        };
+        await dbContext.SyncState.AddAsync(syncState, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Sync state created with hash: {Hash}", newSha);
     }
 
     public async Task<bool> SubjectExistsAsync(string subject, CancellationToken cancellationToken)

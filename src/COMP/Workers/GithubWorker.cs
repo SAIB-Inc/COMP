@@ -59,6 +59,8 @@ public class GithubWorker
                 else
                 {
                     List<GitCommit> latestCommitsSince = await GetLatestCommitsSinceAsync(syncState.Date, stoppingToken);
+                    
+
                     foreach (GitCommit commit in latestCommitsSince)
                     {
                         if (string.IsNullOrEmpty(commit.Url)) continue;
@@ -182,8 +184,7 @@ public class GithubWorker
             latestCommitsSince.AddRange(commitPage);
             page++;
         }
-
-        return latestCommitsSince;
+        return [.. latestCommitsSince.OrderBy(c => c.Commit?.Author?.Date ?? DateTimeOffset.MinValue)];
     }
 
     private static string ExtractSubjectFromPath(string? path)
