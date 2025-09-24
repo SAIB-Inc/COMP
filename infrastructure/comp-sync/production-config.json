@@ -1,0 +1,23 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "Microsoft.EntityFrameworkCore": "Warning",
+      "Comp.Sync.Reducers": "Information"
+    }
+  },
+  "AllowedHosts": "*",
+  "ConnectionStrings": {
+    "CardanoContextSchema": "public"
+  },
+  "CardanoNodeConnection": {
+    "ConnectionType": "UnixSocket",
+    "UnixSocket": {
+      "Path": "/ipc/node.socket"
+    },
+    "NetworkMagic": 764824073,
+    "MaxRollbackSlots": 1000,
+    "RollbackBuffer": 10
+  }
+}
