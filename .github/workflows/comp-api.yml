@@ -6,12 +6,14 @@ on:
       - main
     paths:
       - 'infrastructure/comp-api/**'
-      - 'src/COMP/**'
+      - 'src/COMP.API/**'
+      - 'src/COMP.Data/**'
       - '.github/workflows/comp-api.yml'
   pull_request:
     paths:
       - 'infrastructure/comp-api/**'
-      - 'src/COMP/**'
+      - 'src/COMP.API/**'
+      - 'src/COMP.Data/**'
       - '.github/workflows/comp-api.yml'
   workflow_dispatch:
 
@@ -22,6 +24,7 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
     permissions:
       contents: read
       packages: write
@@ -56,7 +59,7 @@ jobs:
         with:
           context: .
           file: ./infrastructure/comp-api/Dockerfile
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache

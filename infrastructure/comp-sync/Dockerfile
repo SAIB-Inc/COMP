@@ -3,7 +3,7 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
 # Copy project files and restore
-COPY src/COMP/COMP.csproj src/COMP/
+COPY src/COMP.Data/COMP.Data.csproj src/COMP.Data/
 COPY src/COMP.Sync/COMP.Sync.csproj src/COMP.Sync/
 RUN dotnet restore "src/COMP.Sync/COMP.Sync.csproj"
 

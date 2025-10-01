@@ -6,13 +6,5 @@
       "Microsoft.EntityFrameworkCore": "Warning"
     }
   },
-  "AllowedHosts": "*",
-  "RegistryOwner": "cardano-foundation",
-  "RegistryRepo": "cardano-token-registry",
-  "Github": {
-    "UserAgent": {
-      "ProductName": "COMP",
-      "ProductUrl": "(+https://github.com/SAIB-Inc/COMP)"
-    }
-  }
+  "AllowedHosts": "*"
 }

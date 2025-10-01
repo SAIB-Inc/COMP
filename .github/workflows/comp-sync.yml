@@ -7,13 +7,13 @@ on:
     paths:
       - 'infrastructure/comp-sync/**'
       - 'src/COMP.Sync/**'
-      - 'src/COMP/**'
+      - 'src/COMP.Data/**'
       - '.github/workflows/comp-sync.yml'
   pull_request:
     paths:
       - 'infrastructure/comp-sync/**'
       - 'src/COMP.Sync/**'
-      - 'src/COMP/**'
+      - 'src/COMP.Data/**'
       - '.github/workflows/comp-sync.yml'
   workflow_dispatch:
 
@@ -24,6 +24,7 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
     permissions:
       contents: read
       packages: write
@@ -58,7 +59,7 @@ jobs:
         with:
           context: .
           file: ./infrastructure/comp-sync/Dockerfile
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache

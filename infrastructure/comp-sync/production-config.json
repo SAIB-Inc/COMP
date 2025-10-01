@@ -19,5 +19,20 @@
     "NetworkMagic": 764824073,
     "MaxRollbackSlots": 1000,
     "RollbackBuffer": 10
+  },
+  "Sync": {
+    "Dashboard": {
+      "TuiMode": false,
+      "RefreshInterval": 5000,
+      "DisplayType": "sync"
+    }
+  },
+  "RegistryOwner": "cardano-foundation",
+  "RegistryRepo": "cardano-token-registry",
+  "Github": {
+    "UserAgent": {
+      "ProductName": "CardanoMetadataService",
+      "ProductUrl": "(+https://github.com/SAIB-Inc/COMP)"
+    }
   }
 }
