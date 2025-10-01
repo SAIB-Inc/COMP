@@ -4,13 +4,13 @@ using Chrysalis.Cbor.Types.Cardano.Core.Transaction;
 using Chrysalis.Cbor.Extensions.Cardano.Core;
 using Chrysalis.Cbor.Extensions.Cardano.Core.Transaction;
 using Microsoft.EntityFrameworkCore;
-using Comp.Models;
-using Comp.Models.Entity;
+using COMP.Data.Data;
+using COMP.Data.Models.Entity;
 using System.Text;
 using System.Text.RegularExpressions;
 using Chrysalis.Cbor.Types.Cardano.Core.Common;
 
-namespace Comp.Sync.Reducers;
+namespace COMP.Sync.Reducers;
 
 public partial class CIP25Reducer(
     IDbContextFactory<MetadataDbContext> dbContextFactory,

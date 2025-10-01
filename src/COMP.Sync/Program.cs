@@ -1,7 +1,12 @@
 using Argus.Sync.Extensions;
 using Argus.Sync.Data.Models;
 using Microsoft.EntityFrameworkCore;
-using Comp.Models;
+using COMP.Data.Data;
+using COMP.Sync.Services;
+using COMP.API.Modules.Handlers;
+using COMP.Sync.Reducers;
+using System.Net.Http.Headers;
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +15,29 @@ builder.Services.AddCardanoIndexer<MetadataDbContext>(builder.Configuration);
 
 // Register reducers - the assembly scanning will find CIP25Reducer
 builder.Services.AddReducers<MetadataDbContext, IReducerModel>(builder.Configuration);
+builder.Services.AddSingleton<MetadataHandler>();
+builder.Services.AddSingleton<MetadataDbService>();
+builder.Services.AddSingleton<GithubService>();
+builder.Services.AddHostedService<GithubReducer>();
+
+builder.Services.AddHttpClient("GithubApi", client =>
+{
+    client.BaseAddress = new Uri("https://api.github.com/");
+    var productName = builder.Configuration["Github:UserAgent:ProductName"] ?? "CardanoTokenMetadataService";
+    var productVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "Unknown Version";
+    var productUrl = builder.Configuration["Github:UserAgent:ProductUrl"] ?? "(+https://github.com/SAIB-Inc/COMP)";
+    
+    ProductInfoHeaderValue productValue = new(productName, productVersion);
+    ProductInfoHeaderValue commentValue = new(productUrl);
+    client.DefaultRequestHeaders.UserAgent.Add(productValue);
+    client.DefaultRequestHeaders.UserAgent.Add(commentValue);
+    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", builder.Configuration["GithubPAT"]);
+});
+
+builder.Services.AddHttpClient("GithubRaw", client =>
+{
+    client.BaseAddress = new Uri("https://raw.githubusercontent.com/");
+});
 
 var app = builder.Build();
 
