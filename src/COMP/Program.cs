@@ -7,13 +7,19 @@ using System.Net.Http.Headers;
 using System.Reflection;
 using Comp.Services;
 using Comp.Workers;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddFastEndpoints();
-builder.Services.SwaggerDocument();
+builder.Services.SwaggerDocument(o =>
+{
+    o.DocumentSettings = s =>
+    {
+        s.Title = "COMP API";
+        s.Version = "v1";
+    };
+});
 
 builder.Services.AddDbContextFactory<MetadataDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -48,10 +54,15 @@ app.UseHttpsRedirection();
 
 app.UseFastEndpoints();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwaggerGen();
-}
+app.UseSwaggerGen();
+
+app.MapScalarApiReference(options =>
+    options
+        .WithTitle("COMP API")
+        .WithTheme(ScalarTheme.Purple)
+        .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient)
+        .WithOpenApiRoutePattern("/swagger/{documentName}/swagger.json")
+);
 
 // Ensure database is up-to-date on startup (migrate if migrations exist; otherwise create schema)
 using (var scope = app.Services.CreateScope())
