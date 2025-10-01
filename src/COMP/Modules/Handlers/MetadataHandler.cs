@@ -11,21 +11,47 @@ public class MetadataHandler
     IDbContextFactory<MetadataDbContext> _dbContextFactory
 )
 {
-    // Fetch data by subject
+    // Fetch data by subject (checks both registry and on-chain tables)
     public async Task<IResult> GetTokenMetadataAsync(string subject)
     {
-        using MetadataDbContext db = await _dbContextFactory.CreateDbContextAsync();
-        TokenMetadata? token = await db.TokenMetadata
+        await using var db = await _dbContextFactory.CreateDbContextAsync();
+
+        // Query both tables sequentially
+        var registryToken = await db.TokenMetadata
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Subject == subject);
 
-        if (token is null)
+        var onChainToken = await db.TokenMetadataOnChain
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Subject == subject);
+
+        // If both are null, return 404
+        if (registryToken is null && onChainToken is null)
             return Results.NotFound();
 
-        return Results.Ok(token);
+        // Prioritize on-chain data, fall back to registry
+        var result = new
+        {
+            subject,
+            policyId = onChainToken?.PolicyId ?? registryToken?.PolicyId ?? "",
+            name = onChainToken?.Name ?? registryToken?.Name,
+            ticker = registryToken?.Ticker,
+            logo = onChainToken?.Logo ?? registryToken?.Logo,
+            description = onChainToken?.Description ?? registryToken?.Description,
+            decimals = onChainToken?.Decimals ?? registryToken?.Decimals ?? 0,
+            quantity = onChainToken?.Quantity,
+            assetName = onChainToken?.AssetName,
+            tokenType = onChainToken?.TokenType.ToString(),
+            policy = registryToken?.Policy,
+            url = registryToken?.Url,
+            hasOnChainData = onChainToken is not null,
+            hasRegistryData = registryToken is not null
+        };
+
+        return Results.Ok(result);
     }
 
-    // Fetch data by batch with additional filtering
+    // Fetch data by batch with additional filtering (checks both registry and on-chain tables)
     public async Task<IResult> BatchTokenMetadataAsync(
         List<string> subjects,
         int? limit,
@@ -45,54 +71,114 @@ public class MetadataHandler
         bool requireLogo = !(includeEmptyLogo ?? false);
         bool requireTicker = !(includeEmptyTicker ?? false);
 
-        using MetadataDbContext db = await _dbContextFactory.CreateDbContextAsync();
         List<string> distinctSubjects = [.. subjects.Distinct()];
 
-        ExpressionStarter<TokenMetadata> predicate = PredicateBuilder.New<TokenMetadata>(false);
-
-        predicate = predicate.Or(token => distinctSubjects.Contains(token.Subject));
+        // Build predicate for registry metadata
+        ExpressionStarter<TokenMetadata> registryPredicate = PredicateBuilder.New<TokenMetadata>(false);
+        registryPredicate = registryPredicate.Or(token => distinctSubjects.Contains(token.Subject));
 
         if (!string.IsNullOrWhiteSpace(policyId))
         {
-            predicate = predicate.And(token =>
+            registryPredicate = registryPredicate.And(token =>
                 token.Subject.Substring(0, 56)
                     .Equals(policyId, StringComparison.OrdinalIgnoreCase));
         }
         if (requireName)
-            predicate = predicate.And(token => !string.IsNullOrEmpty(token.Name));
+            registryPredicate = registryPredicate.And(token => !string.IsNullOrEmpty(token.Name));
 
         if (requireLogo)
-            predicate = predicate.And(token => !string.IsNullOrEmpty(token.Logo));
+            registryPredicate = registryPredicate.And(token => !string.IsNullOrEmpty(token.Logo));
 
         if (requireTicker)
-            predicate = predicate.And(token => !string.IsNullOrEmpty(token.Ticker));
+            registryPredicate = registryPredicate.And(token => !string.IsNullOrEmpty(token.Ticker));
 
         if (!string.IsNullOrWhiteSpace(policy))
-            predicate = predicate.And(token => token.Policy == policy);
+            registryPredicate = registryPredicate.And(token => token.Policy == policy);
 
         if (!string.IsNullOrWhiteSpace(searchText))
         {
-            predicate = predicate.And(token =>
+            registryPredicate = registryPredicate.And(token =>
                 EF.Functions.ILike(token.Name, $"%{searchText}%") ||
                 (token.Description != null && EF.Functions.ILike(token.Description, $"%{searchText}%")) ||
                 EF.Functions.ILike(token.Ticker, $"%{searchText}%"));
         }
-        IQueryable<TokenMetadata> query = db.TokenMetadata
-            .AsNoTracking()
-            .Where(predicate);
 
-        int total = await query.CountAsync();
+        // Build predicate for on-chain metadata
+        ExpressionStarter<TokenMetadataOnChain> onChainPredicate = PredicateBuilder.New<TokenMetadataOnChain>(false);
+        onChainPredicate = onChainPredicate.Or(token => distinctSubjects.Contains(token.Subject));
 
-        if (limit.HasValue)
+        if (!string.IsNullOrWhiteSpace(policyId))
         {
-            query = query.Skip(effectiveOffset).Take(limit.Value);
+            onChainPredicate = onChainPredicate.And(token => token.PolicyId == policyId);
+        }
+        if (requireName)
+            onChainPredicate = onChainPredicate.And(token => !string.IsNullOrEmpty(token.Name));
+
+        if (requireLogo)
+            onChainPredicate = onChainPredicate.And(token => !string.IsNullOrEmpty(token.Logo));
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            onChainPredicate = onChainPredicate.And(token =>
+                EF.Functions.ILike(token.Name, $"%{searchText}%") ||
+                (token.Description != null && EF.Functions.ILike(token.Description, $"%{searchText}%")));
         }
 
-        List<TokenMetadata> tokenList = await query.ToListAsync();
+        await using var db = await _dbContextFactory.CreateDbContextAsync();
 
-        if (tokenList.Count == 0)
+        // Query both tables sequentially
+        var registryTokens = await db.TokenMetadata
+            .AsNoTracking()
+            .Where(registryPredicate)
+            .ToListAsync();
+
+        var onChainTokens = await db.TokenMetadataOnChain
+            .AsNoTracking()
+            .Where(onChainPredicate)
+            .ToListAsync();
+
+        // Merge results - prioritize on-chain, combine with registry
+        var mergedResults = distinctSubjects
+            .Select(subject =>
+            {
+                var registry = registryTokens.FirstOrDefault(t => t.Subject == subject);
+                var onChain = onChainTokens.FirstOrDefault(t => t.Subject == subject);
+
+                if (registry is null && onChain is null)
+                    return null;
+
+                return new
+                {
+                    subject = subject,
+                    policyId = onChain?.PolicyId ?? registry?.PolicyId ?? "",
+                    name = onChain?.Name ?? registry?.Name,
+                    ticker = registry?.Ticker,
+                    logo = onChain?.Logo ?? registry?.Logo,
+                    description = onChain?.Description ?? registry?.Description,
+                    decimals = onChain?.Decimals ?? registry?.Decimals ?? 0,
+                    quantity = onChain?.Quantity,
+                    assetName = onChain?.AssetName,
+                    tokenType = onChain?.TokenType.ToString(),
+                    policy = registry?.Policy,
+                    url = registry?.Url,
+                    hasOnChainData = onChain is not null,
+                    hasRegistryData = registry is not null
+                };
+            })
+            .Where(t => t is not null)
+            .ToList();
+
+        int total = mergedResults.Count;
+
+        // Apply pagination
+        if (limit.HasValue)
+        {
+            mergedResults = mergedResults.Skip(effectiveOffset).Take(limit.Value).ToList();
+        }
+
+        if (mergedResults.Count == 0)
             return Results.NotFound("No tokens found for the given subjects.");
 
-        return Results.Ok(new { total, data = tokenList });
+        return Results.Ok(new { total, data = mergedResults });
     }
 }
