@@ -20,7 +20,7 @@ public class BatchTokenMetadataEndpoint(MetadataHandler metadataHandler) : Endpo
 
     public override async Task HandleAsync(BatchTokenMetadataRequest req, CancellationToken ct)
     {
-        var result = await _metadataHandler.BatchTokenMetadataAsync(
+        IResult result = await _metadataHandler.BatchTokenMetadataAsync(
             req.Subjects,
             req.Limit,
             req.SearchText,

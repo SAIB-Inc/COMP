@@ -8,7 +8,7 @@ using COMP.Sync.Reducers;
 using System.Net.Http.Headers;
 using System.Reflection;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Add Argus.Sync for blockchain synchronization - this registers the DbContext
 builder.Services.AddCardanoIndexer<MetadataDbContext>(builder.Configuration);
@@ -23,9 +23,9 @@ builder.Services.AddHostedService<GithubReducer>();
 builder.Services.AddHttpClient("GithubApi", client =>
 {
     client.BaseAddress = new Uri("https://api.github.com/");
-    var productName = builder.Configuration["Github:UserAgent:ProductName"] ?? "CardanoTokenMetadataService";
-    var productVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "Unknown Version";
-    var productUrl = builder.Configuration["Github:UserAgent:ProductUrl"] ?? "(+https://github.com/SAIB-Inc/COMP)";
+    string productName = builder.Configuration["Github:UserAgent:ProductName"] ?? "CardanoTokenMetadataService";
+    string productVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "Unknown Version";
+    string productUrl = builder.Configuration["Github:UserAgent:ProductUrl"] ?? "(+https://github.com/SAIB-Inc/COMP)";
     
     ProductInfoHeaderValue productValue = new(productName, productVersion);
     ProductInfoHeaderValue commentValue = new(productUrl);
@@ -39,19 +39,19 @@ builder.Services.AddHttpClient("GithubRaw", client =>
     client.BaseAddress = new Uri("https://raw.githubusercontent.com/");
 });
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 // Ensure database is up-to-date on startup (following Poki.Sync pattern)
-using (var scope = app.Services.CreateScope())
+using (IServiceScope scope = app.Services.CreateScope())
 {
-    var loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
-    var logger = loggerFactory.CreateLogger("DbInitialization");
+    ILoggerFactory loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
+    ILogger logger = loggerFactory.CreateLogger("DbInitialization");
     try
     {
-        var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<MetadataDbContext>>();
-        await using var db = await factory.CreateDbContextAsync();
+        IDbContextFactory<MetadataDbContext> factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<MetadataDbContext>>();
+        await using MetadataDbContext db = await factory.CreateDbContextAsync();
 
-        var hasMigrations = db.Database.GetMigrations().Any();
+        bool hasMigrations = db.Database.GetMigrations().Any();
         if (hasMigrations)
         {
             logger.LogInformation("Applying database migrations...");

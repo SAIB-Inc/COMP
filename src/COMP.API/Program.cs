@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using COMP.Data.Data;
 using COMP.API.Modules.Handlers;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContextFactory<MetadataDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -24,7 +24,7 @@ builder.Services.SwaggerDocument(o =>
 
 builder.Services.AddOpenApi();
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {

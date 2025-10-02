@@ -15,14 +15,14 @@ public class MetadataHandler
     // Fetch data by subject (checks both registry and on-chain tables)
     public async Task<IResult> GetTokenMetadataAsync(string subject)
     {
-        await using var db = await _dbContextFactory.CreateDbContextAsync();
+        await using MetadataDbContext db = await _dbContextFactory.CreateDbContextAsync();
 
         // Query both tables sequentially
-        var registryToken = await db.TokenMetadata
+        TokenMetadata? registryToken = await db.TokenMetadata
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Subject == subject);
 
-        var onChainToken = await db.TokenMetadataOnChain
+        TokenMetadataOnChain? onChainToken = await db.TokenMetadataOnChain
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Subject == subject);
 
@@ -31,7 +31,8 @@ public class MetadataHandler
             return Results.NotFound();
 
         // Prioritize on-chain data, fall back to registry
-        var result = new
+
+        return Results.Ok(new
         {
             subject,
             policyId = onChainToken?.PolicyId ?? registryToken?.PolicyId ?? "",
@@ -47,9 +48,7 @@ public class MetadataHandler
             url = registryToken?.Url,
             hasOnChainData = onChainToken is not null,
             hasRegistryData = registryToken is not null
-        };
-
-        return Results.Ok(result);
+        });
     }
 
     // Fetch data by batch with additional filtering (checks both registry and on-chain tables)
@@ -125,15 +124,15 @@ public class MetadataHandler
                 (token.Description != null && EF.Functions.ILike(token.Description, $"%{searchText}%")));
         }
 
-        await using var db = await _dbContextFactory.CreateDbContextAsync();
+        await using MetadataDbContext db = await _dbContextFactory.CreateDbContextAsync();
 
         // Query both tables sequentially
-        var registryTokens = await db.TokenMetadata
+        List<TokenMetadata> registryTokens = await db.TokenMetadata
             .AsNoTracking()
             .Where(registryPredicate)
             .ToListAsync();
 
-        var onChainTokens = await db.TokenMetadataOnChain
+        List<TokenMetadataOnChain> onChainTokens = await db.TokenMetadataOnChain
             .AsNoTracking()
             .Where(onChainPredicate)
             .ToListAsync();
@@ -142,8 +141,8 @@ public class MetadataHandler
         var mergedResults = distinctSubjects
             .Select(subject =>
             {
-                var registry = registryTokens.FirstOrDefault(t => t.Subject == subject);
-                var onChain = onChainTokens.FirstOrDefault(t => t.Subject == subject);
+                TokenMetadata? registry = registryTokens.FirstOrDefault(t => t.Subject == subject);
+                TokenMetadataOnChain? onChain = onChainTokens.FirstOrDefault(t => t.Subject == subject);
 
                 if (registry is null && onChain is null)
                     return null;

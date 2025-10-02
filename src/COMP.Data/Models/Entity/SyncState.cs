@@ -1,7 +1,6 @@
 namespace COMP.Data.Models.Entity;
 
-public record SyncState
-{
-    public string Hash { get; set; } = string.Empty;
-    public DateTimeOffset Date { get; set; }
-}
+public record SyncState(
+    string Hash,
+    DateTimeOffset Date
+);

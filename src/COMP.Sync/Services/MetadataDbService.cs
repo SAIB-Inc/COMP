@@ -56,11 +56,10 @@ public class MetadataDbService
         }
 
         // Insert new sync state
-        var syncState = new SyncState
-        {
-            Hash = newSha,
-            Date = newDate
-        };
+        SyncState syncState = new(
+            Hash: newSha,
+            Date: newDate
+        );
         await dbContext.SyncState.AddAsync(syncState, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Sync state created with hash: {Hash}", newSha);

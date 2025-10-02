@@ -42,12 +42,12 @@ public class GithubReducer
                     {
                         if (item.Path?.StartsWith("mappings/") == true && item.Path.EndsWith(".json"))
                         {
-                            var subject = ExtractSubjectFromPath(item.Path);
+                            string subject = ExtractSubjectFromPath(item.Path);
 
                             bool exist = await metadataDbService.SubjectExistsAsync(subject, stoppingToken);
                             if (exist) continue;
 
-                            var mapping = await githubService.GetMappingJsonAsync<MetadataResponse>(latestCommit.Sha, item.Path, stoppingToken);
+                            MetadataResponse? mapping = await githubService.GetMappingJsonAsync<MetadataResponse>(latestCommit.Sha, item.Path, stoppingToken);
                             TokenMetadata? token = MapTokenMetadata(mapping);
 
                             if (token == null) continue;
@@ -77,11 +77,11 @@ public class GithubReducer
                                     logger.LogInformation("Skipping removed file {Filename} in commit {Sha}", file.Filename, resolvedCommit.Sha);
                                     continue;
                                 }
-                                var subject = ExtractSubjectFromPath(file.Filename);
+                                string subject = ExtractSubjectFromPath(file.Filename);
 
                                 try
                                 {
-                                    var mapping = await githubService.GetMappingJsonAsync<MetadataResponse>(resolvedCommit.Sha, file.Filename, stoppingToken);
+                                    MetadataResponse? mapping = await githubService.GetMappingJsonAsync<MetadataResponse>(resolvedCommit.Sha, file.Filename, stoppingToken);
                                     TokenMetadata? token = MapTokenMetadata(mapping);
                                     if (token is null) 
                                     {
@@ -135,10 +135,10 @@ public class GithubReducer
             return null;
         }
 
-        var subject = resp.Subject;
-        var name = resp.Name?.Value;
-        var description = resp.Description?.Value;
-        var ticker = resp.Ticker?.Value ?? string.Empty; // optional
+        string? subject = resp.Subject;
+        string? name = resp.Name?.Value;
+        string? description = resp.Description?.Value;
+        string ticker = resp.Ticker?.Value ?? string.Empty; // optional
 
         if (string.IsNullOrEmpty(subject))
         {
@@ -151,35 +151,34 @@ public class GithubReducer
             return null;
         }
 
-        var decimals = resp.Decimals?.Value ?? 0;
+        int decimals = resp.Decimals?.Value ?? 0;
         if (decimals < 0)
         {
             logger.LogWarning("Invalid decimals for subject {Subject}: {Decimals}", subject, decimals);
             return null;
         }
 
-        return new TokenMetadata
-        {
-            Subject = subject,
-            PolicyId = subject.Length >= 56 ? subject[..56] : string.Empty,
-            Name = name,
-            Ticker = ticker,
-            Description = description,
-            Url = resp.Url?.Value,
-            Logo = resp.Logo?.Value,
-            Policy = resp.Policy,
-            Decimals = decimals
-        };
+        return new TokenMetadata(
+            Subject: subject,
+            Name: name,
+            Ticker: ticker,
+            PolicyId: subject.Length >= 56 ? subject[..56] : string.Empty,
+            Decimals: decimals,
+            Policy: resp.Policy,
+            Url: resp.Url?.Value,
+            Logo: resp.Logo?.Value,
+            Description: description
+        );
     }
 
     private async Task<List<GitCommit>> GetLatestCommitsSinceAsync(DateTimeOffset lastSyncDate, CancellationToken stoppingToken)
     {
-        var latestCommitsSince = new List<GitCommit>();
-        var page = 1;
+        List<GitCommit> latestCommitsSince = [];
+        int page = 1;
 
         while (true)
         {
-            var commitPage = await githubService.GetCommitPageAsync(lastSyncDate, page, stoppingToken);
+            IEnumerable<GitCommit>? commitPage = await githubService.GetCommitPageAsync(lastSyncDate, page, stoppingToken);
             if (commitPage is null || !commitPage.Any()) break;
             latestCommitsSince.AddRange(commitPage);
             page++;
