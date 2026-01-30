@@ -6,7 +6,6 @@
 *.suo
 *.user
 *.userosscache
-*.sln.docstates
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -392,10 +391,6 @@ FodyWeavers.xsd
 *.msm
 *.msp
 
-# JetBrains Rider
-*.sln.iml
-.idea/
-
 # macOS
 .DS_Store
 
@@ -406,3 +401,22 @@ FodyWeavers.xsd
 # Test coverage
 coverage/
 *.coverage
+
+# Application settings with secrets
+appsettings.json
+appsettings.*.json
+!appsettings.example.json
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker volumes/data
+docker-data/
+volumes/
+
+# Credentials/secrets
+*.pem
+*.key
+secrets/

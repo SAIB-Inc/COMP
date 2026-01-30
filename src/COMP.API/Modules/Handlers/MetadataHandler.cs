@@ -1,8 +1,6 @@
-using COMP.Data.Models;
 using COMP.Data.Models.Entity;
 using Microsoft.EntityFrameworkCore;
 using LinqKit;
-using Microsoft.CodeAnalysis;
 using COMP.Data.Data;
 
 namespace COMP.API.Modules.Handlers;
@@ -79,9 +77,9 @@ public class MetadataHandler
 
         if (!string.IsNullOrWhiteSpace(policyId))
         {
+            string lowerPolicyId = policyId.ToLowerInvariant();
             registryPredicate = registryPredicate.And(token =>
-                token.Subject.Substring(0, 56)
-                    .Equals(policyId, StringComparison.OrdinalIgnoreCase));
+                token.Subject.Substring(0, 56).Equals(lowerPolicyId, StringComparison.CurrentCultureIgnoreCase));
         }
         if (requireName)
             registryPredicate = registryPredicate.And(token => !string.IsNullOrEmpty(token.Name));
