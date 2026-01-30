@@ -1,5 +1,4 @@
 using COMP.Data.Models.Entity;
-using COMP.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using COMP.Data.Models.Github;
 using COMP.Data.Data;

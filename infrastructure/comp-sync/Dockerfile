@@ -4,6 +4,7 @@ WORKDIR /src
 
 # Copy project files and restore
 COPY src/COMP.Data/COMP.Data.csproj src/COMP.Data/
+COPY src/COMP.API/COMP.API.csproj src/COMP.API/
 COPY src/COMP.Sync/COMP.Sync.csproj src/COMP.Sync/
 RUN dotnet restore "src/COMP.Sync/COMP.Sync.csproj"
 

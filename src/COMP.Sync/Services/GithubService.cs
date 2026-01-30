@@ -1,13 +1,13 @@
-using System.Text.Json;
 using COMP.Data.Models.Github;
 
 namespace COMP.Sync.Services;
 
 public class GithubService
 (
-   IConfiguration config,
-   IHttpClientFactory httpClientFactory)
+    IConfiguration config,
+    IHttpClientFactory httpClientFactory)
 {
+    
     private readonly string _registryOwner = config["RegistryOwner"] ?? throw new InvalidOperationException("RegistryOwner is not configured.");
     private readonly string _registryRepo = config["RegistryRepo"] ?? throw new InvalidOperationException("RegistryRepo is not configured.");
     private readonly HttpClient _httpClient = httpClientFactory.CreateClient("GithubApi");
