@@ -1,6 +1,6 @@
-# Multi-stage build for COMP (ASP.NET Core 9)
+# Multi-stage build for COMP (ASP.NET Core 10)
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy project files and restore as distinct layers for better caching
@@ -14,7 +14,7 @@ COPY . .
 RUN dotnet publish "src/COMP/COMP.csproj" -c Release -o /app/out --no-restore
 
 
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
 # Copy app
